@@ -99,9 +99,9 @@ export function injectDependencies(deps: {
   if (deps.decentralGPTClient) _decentralGPTClient = deps.decentralGPTClient;
 }
 
-const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://www.decentralgpt.org/api/v0/chat/completion/proxy';
+const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://korea-chat.degpt.ai/api/v0/chat/completion/proxy';
 const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
-const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3.3';
+const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3-70B';
 
 export function mergePersonalities(original: PersonalityAnalysis, incoming: PersonalityAnalysis): PersonalityAnalysis {
   return {
