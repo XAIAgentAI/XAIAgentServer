@@ -27,8 +27,7 @@ let _decentralGPTClient: DecentralGPTClient = {
     const response = await fetch(DECENTRALGPT_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DECENTRALGPT_API_KEY}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: DECENTRALGPT_MODEL,
@@ -52,8 +51,8 @@ let _decentralGPTClient: DecentralGPTClient = {
       if (response.status === 429) {
         throw new Error('DecentralGPT API rate limit exceeded. Please try again later.');
       }
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('DecentralGPT API authentication failed. Please check your API key.');
+      if (response.status === 500) {
+        throw new Error('DecentralGPT API server error. Please try again later.');
       }
       throw new Error(`DecentralGPT API error (${response.status}): ${errorMessage}`);
     }
@@ -101,7 +100,7 @@ export function injectDependencies(deps: {
 
 const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://korea-chat.degpt.ai/api/v0/chat/completion/proxy';
 const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
-const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3-70B';
+const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Qwen2.5-72B';
 
 export function mergePersonalities(original: PersonalityAnalysis, incoming: PersonalityAnalysis): PersonalityAnalysis {
   return {
