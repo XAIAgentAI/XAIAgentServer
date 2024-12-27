@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title XAIAgent DRC20 Token
- * @dev Implementation of the XAA token on DeepBrainChain with 1000 billion total supply
+ * @dev Implementation of the XAA token on DeepBrainChain with 100 billion total supply
  */
 contract XAIAgentDRC20 is ERC20, ERC20Burnable, Ownable {
     // Struct to track locked token information
@@ -39,9 +39,9 @@ contract XAIAgentDRC20 is ERC20, ERC20Burnable, Ownable {
         _;
     }
 
-    constructor(address initialOwner) ERC20("XAA Token", "XAA") Ownable(initialOwner) {
-        // Mint 1000 billion tokens to the contract creator
-        _mint(initialOwner, 1000_000_000_000 * 10**decimals()); // 1000 billion tokens
+    constructor(address initialOwner) ERC20("XAIAgent", "XAA") Ownable(initialOwner) {
+        // Mint 100 billion tokens to the contract creator
+        _mint(initialOwner, 100_000_000_000 * 10**decimals()); // 100 billion tokens
     }
 
     /**
