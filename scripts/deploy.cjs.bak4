@@ -1,0 +1,84 @@
+const hre = require("hardhat");
+
+async function main() {
+    console.log("\nStarting XAIAgent DRC20 token deployment...");
+
+    // Create a new provider instance
+    const provider = new hre.ethers.JsonRpcProvider("https://rpc-testnet.dbcwallet.io");
+    const wallet = new hre.ethers.Wallet("15ed9810f64dc30002a26def833fdda5006ef5ae51553c9d83e1644b295fa321", provider);
+    
+    console.log("Deploying contracts with the account:", wallet.address);
+    
+    try {
+        // Get latest nonce
+        const nonce = await provider.getTransactionCount(wallet.address, "latest");
+        console.log("Using nonce:", nonce);
+        
+        // Use lower gas price - 0.01 gwei
+        const gasPrice = BigInt(10000000); // 0.01 gwei
+        console.log("Using gas price:", hre.ethers.formatUnits(gasPrice, "gwei"), "gwei");
+
+        // Get balance
+        const balance = await provider.getBalance(wallet.address);
+        console.log("Account balance:", hre.ethers.formatEther(balance), "DBC");
+        
+        // Create contract factory
+        const XAIAgentDRC20 = await hre.ethers.getContractFactory("XAIAgentDRC20", wallet);
+        console.log("Contract factory created. Starting deployment...");
+
+        // Get deployment transaction data
+        const deployTx = await XAIAgentDRC20.getDeployTransaction(wallet.address);
+        
+        // Estimate gas with a lower limit
+        const gasLimit = BigInt(1000000); // Set fixed gas limit
+        console.log("Using fixed gas limit:", gasLimit.toString());
+        
+        // Calculate total cost
+        const totalCost = gasPrice * gasLimit;
+        console.log("Estimated total cost:", hre.ethers.formatEther(totalCost), "DBC");
+        
+        if (balance < totalCost) {
+            throw new Error(`Insufficient funds. Need ${hre.ethers.formatEther(totalCost)} DBC but have ${hre.ethers.formatEther(balance)} DBC`);
+        }
+
+        // Create deployment transaction with explicit parameters
+        const tx = {
+            data: deployTx.data,
+            gasPrice: gasPrice,
+            gasLimit: gasLimit,
+            nonce: nonce,
+            chainId: 19880818
+        };
+
+        // Sign and send transaction
+        const signedTx = await wallet.signTransaction(tx);
+        console.log("Transaction signed. Sending to network...");
+        
+        const txResponse = await provider.broadcastTransaction(signedTx);
+        console.log("Transaction sent:", txResponse.hash);
+        
+        // Wait for deployment
+        const receipt = await txResponse.wait();
+        const contractAddress = receipt.contractAddress;
+        
+        console.log("XAIAgent DRC20 token deployed to:", contractAddress);
+        
+        // Verify the total supply
+        const contract = XAIAgentDRC20.attach(contractAddress);
+        const totalSupply = await contract.totalSupply();
+        console.log("Total supply:", hre.ethers.formatEther(totalSupply), "XAA");
+        
+        return contractAddress;
+    } catch (error) {
+        console.error("\nDeployment failed:");
+        console.error(error.message);
+        process.exit(1);
+    }
+}
+
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });

@@ -1,0 +1,95 @@
+const hre = require("hardhat");
+
+async function main() {
+    console.log("\nStarting XAIAgent DRC20 token deployment...");
+
+    // Create a new provider instance
+    const provider = new hre.ethers.JsonRpcProvider("https://rpc-testnet.dbcwallet.io");
+    const wallet = new hre.ethers.Wallet("15ed9810f64dc30002a26def833fdda5006ef5ae51553c9d83e1644b295fa321", provider);
+    
+    console.log("Deploying contracts with the account:", wallet.address);
+    
+    // Get latest nonce and pending nonce
+    const latestNonce = await provider.getTransactionCount(wallet.address, "latest");
+    const pendingNonce = await provider.getTransactionCount(wallet.address, "pending");
+    console.log("Latest nonce:", latestNonce);
+    console.log("Pending nonce:", pendingNonce);
+    
+    // Use pending nonce to avoid "already known" errors
+    const nonce = pendingNonce;
+    console.log("Using nonce:", nonce);
+    
+    // Use a higher gas price - 1 gwei
+    const gasPrice = BigInt(1000000000); // 1 gwei
+    console.log("Using gas price:", hre.ethers.formatUnits(gasPrice, "gwei"), "gwei");
+
+    // Get balance using the provider
+    const balance = await provider.getBalance(wallet.address);
+    console.log("Account balance:", hre.ethers.formatEther(balance), "DBC");
+    
+    try {
+        // Create contract factory with the wallet
+        const XAIAgentDRC20 = await hre.ethers.getContractFactory("XAIAgentDRC20", wallet);
+        console.log("Contract factory created. Starting deployment...");
+
+        // Estimate gas with manual calculation for safety margin
+        const deployTx = await XAIAgentDRC20.getDeployTransaction(wallet.address);
+        const estimatedGas = await provider.estimateGas({
+            from: wallet.address,
+            data: deployTx.data
+        });
+        
+        // Add 20% buffer to estimated gas
+        const gasLimit = BigInt(Math.ceil(Number(estimatedGas) * 1.2));
+        console.log("Estimated gas needed:", estimatedGas.toString());
+        console.log("Using gas limit with buffer:", gasLimit.toString());
+        
+        // Calculate total cost
+        const totalCost = gasPrice * gasLimit;
+        console.log("Estimated total cost:", hre.ethers.formatEther(totalCost), "DBC");
+        
+        if (balance < totalCost) {
+            throw new Error(`Insufficient funds. Need ${hre.ethers.formatEther(totalCost)} DBC but have ${hre.ethers.formatEther(balance)} DBC`);
+        }
+        
+        // Deploy with specific options
+        const contract = await XAIAgentDRC20.deploy(
+            wallet.address,
+            {
+                gasPrice: gasPrice,
+                gasLimit: gasLimit,
+                nonce: nonce
+            }
+        );
+        
+        console.log("Deployment transaction sent. Waiting for confirmation...");
+        await contract.waitForDeployment();
+        const contractAddress = await contract.getAddress();
+        
+        console.log("XAIAgent DRC20 token deployed to:", contractAddress);
+        console.log("Transaction hash:", contract.deploymentTransaction().hash);
+        
+        // Verify the total supply
+        const totalSupply = await contract.totalSupply();
+        console.log("Total supply:", hre.ethers.formatEther(totalSupply), "XAA");
+        
+        return contractAddress;
+    } catch (error) {
+        console.error("\nDeployment failed:");
+        if (error.message.includes("insufficient funds")) {
+            console.error(error.message);
+        } else if (error.message.includes("nonce too low")) {
+            console.error("Nonce too low. Try increasing the nonce value.");
+        } else {
+            console.error(error.message);
+        }
+        process.exit(1);
+    }
+}
+
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
