@@ -2,8 +2,16 @@ import { Tweet, TweetFetchResult, AgentTweetUpdate } from '../types/twitter';
 import { AIAgent } from '../types/index';
 import TwitterClient from './twitterClient';
 import { getUserAgentAccounts } from './aiAgentService';
+import { get } from 'lodash';
+import dayjs from 'dayjs';
 
 export class TweetService {
+  // Public method for testing tweet processing
+  public async testProcessTweets(tweets: Tweet[]): Promise<{ tweets: Tweet[]; totalTokens: number }> {
+    const processedTweets = this.processTweets(tweets);
+    const totalTokens = this.calculateTotalTokens(processedTweets);
+    return { tweets: processedTweets, totalTokens };
+  }
   private client: any; // Will be properly typed once we have XAuthClient implementation
 
   constructor() {
@@ -12,7 +20,7 @@ export class TweetService {
 
   private async initializeClient() {
     try {
-      this.client = await XAuthClient();
+      this.client = await TwitterClient.getInstance();
     } catch (error) {
       console.error('Failed to initialize Twitter client:', error);
       throw error;
@@ -23,18 +31,18 @@ export class TweetService {
     const updates: AgentTweetUpdate[] = [];
     
     try {
-      const agents = await getAIAgents();
+      const agents = await getUserAgentAccounts();
       
       for (const agent of agents) {
         try {
-          const tweets = await this.fetchUserTweets(agent.xHandle);
+          const tweets = await this.fetchUserTweets(agent.xHandle || agent.xAccountId);
           updates.push({
-            agentId: agent.id,
+            agentId: agent.xAccountId,
             tweets,
             lastFetchTime: dayjs().toISOString()
           });
         } catch (error) {
-          console.error(`Error fetching tweets for ${agent.xHandle}:`, error);
+          console.error(`Error fetching tweets for ${agent.xHandle || agent.xAccountId}:`, error);
         }
       }
     } catch (error) {
@@ -58,8 +66,21 @@ export class TweetService {
     }
   }
 
-  private processTweets(tweets: any[]): Tweet[] {
-    return tweets
+  private countTokensInTweet(text: string): number {
+    // Split on whitespace and punctuation, filter out empty strings
+    return text.split(/[\s,.!?;:'"()\[\]{}|\\/<>]+/)
+      .filter(token => token.length > 0)
+      .length;
+  }
+
+  private calculateTotalTokens(tweets: Tweet[]): number {
+    return tweets.reduce((total, tweet) => total + (tweet.tokenCount || 0), 0);
+  }
+
+  // Made protected for testing purposes
+  protected processTweets(tweets: any[]): Tweet[] {
+    // First filter and map tweets
+    let processedTweets = tweets
       .filter(tweet => {
         // Filter out retweets and quotes
         const isRetweet = !tweet.referenced_tweets || tweet.referenced_tweets.length === 0;
@@ -102,9 +123,26 @@ export class TweetService {
           user,
           images,
           videos,
-          url: `https://x.com/${user.screenName}/status/${get(tweet, 'raw.result.legacy.idStr')}`
+          url: `https://x.com/${user.screenName}/status/${get(tweet, 'raw.result.legacy.idStr')}`,
+          tokenCount: this.countTokensInTweet(get(tweet, 'raw.result.legacy.fullText', ''))
         };
       });
+
+    // Calculate total tokens and truncate if needed
+    let totalTokens = 0;
+    const maxTokens = 60000;
+    
+    // Keep only tweets that fit within the token limit
+    processedTweets = processedTweets.filter(tweet => {
+      const newTotal = totalTokens + (tweet.tokenCount || 0);
+      if (newTotal <= maxTokens) {
+        totalTokens = newTotal;
+        return true;
+      }
+      return false;
+    });
+
+    return processedTweets;
   }
 }
 

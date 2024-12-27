@@ -18,6 +18,7 @@ export interface Tweet {
   images: string[];
   videos: string[];
   url: string;
+  tokenCount?: number;
 }
 
 export interface TweetFetchResult {

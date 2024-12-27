@@ -17,10 +17,16 @@ export interface XProfile {
   };
 }
 
+export enum MentionType {
+  TOKEN_CREATION = 'TOKEN_CREATION',
+  QUESTION = 'QUESTION'
+}
+
 export interface XAccountData {
   id: string;
   profile: XProfile;
   tweets: XTweet[];
+  mentionText?: string;
 }
 
 // AI Agent Types
@@ -33,6 +39,7 @@ export interface PersonalityAnalysis {
     primary: string;
     strengths: string[];
     weaknesses: string[];
+    languages: string[];
   };
   professionalAptitude: {
     industries: string[];
@@ -58,9 +65,27 @@ export interface TrainingDataRequest {
   trainingText: string;
 }
 
+export interface PersonalityUpdateRequest {
+  description: string;
+}
+
+import { Request } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    username?: string;
+    xAccountId?: string;
+  };
+  body: any;
+  params: ParamsDictionary;
+}
+
 export interface AIAgent {
   id: string;
   xAccountId: string;
+  xHandle: string;  // Adding xHandle for Twitter username
   personality: PersonalityAnalysis;
   createdAt: string;
   lastTrained: string;

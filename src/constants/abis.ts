@@ -1,5 +1,7 @@
 // Basic DRC20 ABI for token interactions
 export const DRC20_ABI = [
+  'constructor()',
+  'function initialize(string memory name_, string memory symbol_, uint256 totalSupply_, address creator_) external',
   'function totalSupply() external view returns (uint256)',
   'function decimals() external view returns (uint8)',
   'function symbol() external view returns (string)',

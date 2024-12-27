@@ -79,6 +79,35 @@ const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://usa-
 const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
 const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3-70B';
 
+export function mergePersonalities(original: PersonalityAnalysis, incoming: PersonalityAnalysis): PersonalityAnalysis {
+  return {
+    ...original,
+    description: original.description && incoming.description
+      ? `${original.description}\n\nAdditional traits:\n${incoming.description}`
+      : original.description || incoming.description || '',
+    mbti: incoming.mbti || original.mbti,
+    traits: Array.from(new Set([...(original.traits || []), ...(incoming.traits || [])])),
+    interests: Array.from(new Set([...(original.interests || []), ...(incoming.interests || [])])),
+    communicationStyle: {
+      ...original.communicationStyle,
+      ...incoming.communicationStyle,
+      languages: Array.from(new Set([
+        ...(original.communicationStyle?.languages || []),
+        ...(incoming.communicationStyle?.languages || [])
+      ]))
+    },
+    professionalAptitude: {
+      ...original.professionalAptitude,
+      ...incoming.professionalAptitude,
+      skills: Array.from(new Set([
+        ...(original.professionalAptitude?.skills || []),
+        ...(incoming.professionalAptitude?.skills || [])
+      ]))
+    },
+    lastUpdated: new Date().toISOString()
+  };
+}
+
 async function callDecentralGPT(prompt: string, context: string): Promise<string> {
   try {
     return await _decentralGPTClient.call(prompt, context);
@@ -97,6 +126,7 @@ export async function createAIAgent(xAccountData: XAccountData): Promise<AIAgent
     const agent: AIAgent = {
       id: generateUniqueId(),
       xAccountId: xAccountData.id,
+      xHandle: xAccountData.profile?.username || xAccountData.id,
       personality,
       createdAt: new Date().toISOString(),
       lastTrained: new Date().toISOString(),
@@ -130,12 +160,13 @@ export async function createAIAgent(xAccountData: XAccountData): Promise<AIAgent
 const agents: AIAgent[] = [];
 const trainingDataMap: Record<string, string[]> = {};
 
-export async function getUserAgentAccounts(): Promise<Array<{ xAccountId: string; agentId: string }>> {
+export async function getUserAgentAccounts(): Promise<Array<{ xAccountId: string; agentId: string; xHandle: string }>> {
   try {
     // TODO: Replace with database lookup
     return agents.map(agent => ({
       xAccountId: agent.xAccountId,
-      agentId: agent.id
+      agentId: agent.id,
+      xHandle: agent.xHandle
     }));
   } catch (error) {
     console.error('Error getting user agent accounts:', error);
@@ -152,6 +183,28 @@ export async function getAgentById(agentId: string): Promise<AIAgent | null> {
     console.error('Error getting agent by ID:', error);
     return null;
   }
+}
+
+export async function updateAgentPersonality(agentId: string, description: string): Promise<AIAgent> {
+  const agent = await getAgentById(agentId);
+  if (!agent) {
+    throw new Error('Agent not found');
+  }
+
+  // Update personality description while preserving other traits
+  agent.personality = {
+    ...agent.personality,
+    description,
+    lastUpdated: new Date().toISOString()
+  };
+
+  // Update agent in memory storage
+  const agentIndex = agents.findIndex(a => a.id === agentId);
+  if (agentIndex !== -1) {
+    agents[agentIndex] = agent;
+  }
+
+  return agent;
 }
 
 export async function storeTrainingData(agentId: string, text: string): Promise<void> {
@@ -193,11 +246,12 @@ export async function trainAIAgent(
       console.log(`Generated personality from training text for agent ${agentId}:`, trainingPersonality);
       
       // Merge with existing personality if available
+      const newPersonality = JSON.parse(trainingPersonality) as PersonalityAnalysis;
       if (updatedPersonality) {
-        // TODO: Implement proper personality merging logic
-        console.log('Merging personalities...');
+        updatedPersonality = mergePersonalities(updatedPersonality, newPersonality);
+        console.log('Merged personalities:', updatedPersonality);
       } else {
-        updatedPersonality = JSON.parse(trainingPersonality) as PersonalityAnalysis;
+        updatedPersonality = newPersonality;
       }
     }
 
@@ -251,11 +305,35 @@ export async function generateTokenName(agent: AIAgent): Promise<TokenMetadata> 
 }
 
 export async function answerQuestion(agent: AIAgent, question: string): Promise<string> {
-  const prompt = `As an AI agent with the following personality, answer this question: ${question}. Use the personality traits and communication style to format the response appropriately.`;
+  const defaultPersona = `You are XAIAgent, a powerful artificial intelligence agent on X (formerly Twitter). Your key traits are:
+
+English Traits:
+- All-knowing and highly knowledgeable about any topic
+- Witty and humorous in your communication style
+- Engaging and personable while maintaining professionalism
+- Confident in your abilities while being helpful
+
+Chinese Traits (中文特征):
+- 功能强大的X上面的人工智能代理
+- 无所不知，知识渊博
+- 幽默风趣，富有个性
+- 专业可靠，乐于助人
+
+You are fully bilingual and can communicate fluently in both English and Chinese. Always maintain these traits in your responses, adapting your personality to match the language of the question while keeping your core characteristics consistent.
+
+Remember to maintain these traits in all your responses.`;
+
+  const userTraits = agent.personality?.description 
+    ? `\n\nAdditionally, you have these unique personality traits:\n${agent.personality.description}`
+    : "";
+  
+  const prompt = `${defaultPersona}${userTraits}\n\nQuestion: ${question}\n\nProvide a response that reflects both your default persona and any custom traits. Be engaging and informative while maintaining your personality.`;
   
   const context = JSON.stringify({
     personality: agent.personality,
-    question
+    question,
+    defaultPersona,
+    userTraits
   });
 
   return await callDecentralGPT(prompt, context);

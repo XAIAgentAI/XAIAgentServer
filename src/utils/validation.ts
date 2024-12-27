@@ -41,3 +41,27 @@ export async function verifyAgentOwnership(userId: string | undefined, agentId: 
     return false;
   }
 }
+
+export function validatePersonalityUpdate(description: string): string | null {
+  if (!description || description.trim().length === 0) {
+    return 'Personality description is required';
+  }
+
+  if (description.length > 1000) {
+    return 'Personality description must be less than 1000 characters';
+  }
+
+  // Check for potentially harmful content
+  const forbiddenPatterns = [
+    /<script/i,
+    /javascript:/i,
+    /data:/i,
+    /vbscript:/i
+  ];
+
+  if (forbiddenPatterns.some(pattern => pattern.test(description))) {
+    return 'Invalid personality description content';
+  }
+
+  return null;
+}
