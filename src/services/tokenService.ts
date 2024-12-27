@@ -51,7 +51,6 @@ export async function createToken(xAccountData: XAccountData, creatorAddress: st
     }
     throw new Error(`Failed to create token: ${error.message}`);
   }
-  }
 }
 
 async function generateTokenMetadata(xAccountData: XAccountData): Promise<TokenMetadata> {
