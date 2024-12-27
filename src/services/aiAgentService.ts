@@ -58,6 +58,19 @@ let _decentralGPTClient: DecentralGPTClient = {
     }
 
     const responseData = await response.json();
+    console.log('DecentralGPT API Response:', JSON.stringify(responseData, null, 2));
+    
+    // Check if response has the expected structure
+    if (!responseData || typeof responseData !== 'object') {
+      console.error('Invalid API response format:', responseData);
+      throw new Error('DecentralGPT API returned an invalid response format');
+    }
+
+    // Handle both standard and error response formats
+    if ('error' in responseData) {
+      throw new Error(`DecentralGPT API error: ${responseData.error}`);
+    }
+
     const data = responseData as {
       code: number;
       message: string;
