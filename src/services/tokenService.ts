@@ -35,12 +35,22 @@ export async function createToken(xAccountData: XAccountData, creatorAddress: st
     return {
       ...token,
       totalSupply: TOTAL_SUPPLY.toString(),
-      initialPriceUSD,
+      initialPriceUSD: initialPriceUSD.toString(),
       poolAddress: pool.poolAddress
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating token:', error);
-    throw error;
+    if (error.message.includes('insufficient funds')) {
+      throw new Error('Insufficient funds to deploy token contract');
+    }
+    if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+      throw new Error('Failed to deploy token: Gas estimation failed');
+    }
+    if (error.message.includes('nonce too low')) {
+      throw new Error('Transaction failed: Nonce already used');
+    }
+    throw new Error(`Failed to create token: ${error.message}`);
+  }
   }
 }
 
@@ -112,7 +122,7 @@ async function deployTokenContract(metadata: TokenMetadata, creatorAddress: stri
         symbol: metadata.symbol,
         creatorAddress,
         totalSupply: TOTAL_SUPPLY.toString(),
-        initialPriceUSD: TARGET_FDV_USD / Number(formatUnits(TOTAL_SUPPLY, 18))
+        initialPriceUSD: (TARGET_FDV_USD / Number(formatUnits(TOTAL_SUPPLY, 18))).toString()
       };
     } catch (error: any) {
       console.error(`Deployment attempt ${attempt + 1} failed:`, error);

@@ -6,7 +6,7 @@ import {
   PersonalAnalysisResult,
   MatchingAnalysisResult,
   AnalysisResponse,
-  PaymentError
+  SystemError
 } from '../types';
 // Allow dependency injection for testing
 import { userAnalyticsService as defaultUserAnalyticsService } from './userAnalyticsService';
@@ -204,8 +204,14 @@ export async function getUserAgentAccounts(): Promise<Array<{ xAccountId: string
       agentId: agent.id,
       xHandle: agent.xHandle
     }));
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting user agent accounts:', error);
+    if (error.code === 'NETWORK_ERROR') {
+      throw new Error('Network error: Unable to fetch agent accounts');
+    }
+    if (error.message.includes('authentication failed')) {
+      throw new Error('Authentication error: Unable to access agent accounts');
+    }
     return [];
   }
 }
@@ -306,9 +312,15 @@ export async function trainAIAgent(
         console.log(`Updated agent ${agentId} with new personality:`, updatedPersonality);
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error training AI agent:', error);
-    throw error;
+    if (error.message?.includes('rate limit')) {
+      throw new Error('API rate limit exceeded. Please try again later.');
+    }
+    if (error.message?.includes('token limit')) {
+      throw new Error('Training data exceeds maximum token limit.');
+    }
+    throw new Error(`Failed to train AI agent: ${error.message}`);
   }
 }
 
@@ -458,13 +470,37 @@ export async function analyzePersonality(xAccountData: XAccountData): Promise<An
       paymentRequired: analysisRecord.paymentRequired,
       freeUsesLeft: analysisRecord.freeUsesLeft
     };
-  } catch (error) {
+  } catch (error: any) {
     if (!analysisRecord) {
       analysisRecord = await _userAnalyticsService.recordAnalysis(xAccountData.id, 'personal');
     }
+    const errorMessage = error.message || 'Unknown error occurred';
+    console.error('Error analyzing personality:', error);
+    
+    if (error.message?.includes('rate limit')) {
+      return {
+        success: false,
+        error: 'RATE_LIMIT_EXCEEDED' as SystemError,
+        message: 'API rate limit exceeded. Please try again later.',
+        paymentRequired: analysisRecord.paymentRequired,
+        freeUsesLeft: analysisRecord.freeUsesLeft
+      };
+    }
+    
+    if (error.message?.includes('token limit')) {
+      return {
+        success: false,
+        error: 'TOKEN_LIMIT_EXCEEDED' as SystemError,
+        message: 'Input text exceeds maximum token limit.',
+        paymentRequired: analysisRecord.paymentRequired,
+        freeUsesLeft: analysisRecord.freeUsesLeft
+      };
+    }
+
     return {
       success: false,
-      error: 'ANALYSIS_ERROR',
+      error: 'ANALYSIS_ERROR' as SystemError,
+      message: errorMessage,
       paymentRequired: analysisRecord.paymentRequired,
       freeUsesLeft: analysisRecord.freeUsesLeft
     };
@@ -489,10 +525,16 @@ export async function analyzeMatching(
       
       // Return error if either payment failed or analysis failed
       if (!paymentResult.success || !analysisRecord.success) {
+        const errorType = !paymentResult.success ? 'INSUFFICIENT_BALANCE' : 'ANALYSIS_FAILED';
+        const message = !paymentResult.success 
+          ? 'Insufficient XAA balance for analysis' 
+          : 'Analysis failed. Please try again.';
+        
         return {
           success: false,
           paymentRequired: true,
-          error: 'INSUFFICIENT_BALANCE',
+          error: errorType as SystemError,
+          message,
           freeUsesLeft: analysisRecord.freeUsesLeft
         };
       }

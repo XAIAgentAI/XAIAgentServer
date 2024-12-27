@@ -99,9 +99,10 @@ export class TweetService {
 
   // Made protected for testing purposes
   protected processTweets(tweets: any[]): Tweet[] {
-    // First filter and map tweets
-    let processedTweets = tweets
-      .filter(tweet => {
+    try {
+      // First filter and map tweets
+      let processedTweets = tweets
+        .filter(tweet => {
         // Filter out retweets and quotes
         const isRetweet = !tweet.referenced_tweets || tweet.referenced_tweets.length === 0;
         const isQuoteStatus = get(tweet, 'raw.result.legacy.isQuoteStatus');
@@ -163,6 +164,16 @@ export class TweetService {
     });
 
     return processedTweets;
+    } catch (error: any) {
+      console.error('Error processing tweets:', error);
+      if (error.message?.includes('token limit')) {
+        throw new Error('Tweet data exceeds maximum token limit of 60,000.');
+      }
+      if (error.message?.includes('invalid tweet format')) {
+        throw new Error('Invalid tweet format encountered during processing.');
+      }
+      throw new Error(`Failed to process tweets: ${error.message}`);
+    }
   }
 }
 

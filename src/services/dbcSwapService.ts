@@ -1,6 +1,6 @@
 import { ethers, Contract, JsonRpcProvider } from 'ethers';
 import { DRC20_ABI } from '../constants/abis';
-import { DBCSwapPool } from '../types/index';
+import { DBCSwapPool, SystemError } from '../types/index';
 
 export class DBCSwapService {
   private provider: JsonRpcProvider;
@@ -16,9 +16,26 @@ export class DBCSwapService {
       // TODO: Implement actual price fetching from DBCSwap
       // This will be implemented using DBCSwap's price oracle or router contract
       return 0.001; // Placeholder price
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching XAA price:', error);
-      throw error;
+      
+      if (error.code === 'NETWORK_ERROR') {
+        throw new Error('Network error while fetching XAA price');
+      }
+      
+      if (error.code === 'CONTRACT_ERROR') {
+        throw new Error('Smart contract error while reading price data');
+      }
+      
+      if (error.message?.includes('gas')) {
+        throw new Error('Gas estimation failed while reading price data');
+      }
+      
+      if (error.message?.includes('not initialized')) {
+        throw new Error('Price oracle not initialized');
+      }
+      
+      throw new Error(`Failed to fetch XAA price: ${error.message || 'Unknown error'}`);
     }
   }
 
@@ -46,7 +63,16 @@ export class DBCSwapService {
       if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
         throw new Error('Failed to create pool: Gas estimation failed');
       }
-      throw new Error(`Failed to create DBCSwap pool: ${error.message}`);
+      if (error.message.includes('insufficient allowance')) {
+        throw new Error('Token approval required before creating pool');
+      }
+      if (error.message.includes('TRANSFER_FROM_FAILED')) {
+        throw new Error('Failed to transfer tokens to pool. Check token balance and allowance.');
+      }
+      if (error.code === 'NETWORK_ERROR') {
+        throw new Error('Network error: Unable to connect to DBC network');
+      }
+      throw new Error(`Failed to create DBCSwap pool: ${error.message || 'Unknown error'}`);
     }
   }
 }

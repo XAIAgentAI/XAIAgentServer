@@ -1,6 +1,16 @@
-import { createAIAgent, answerQuestion } from './aiAgentService.js';
-import { createToken } from './tokenService.js';
+import { createAIAgent as defaultCreateAIAgent, answerQuestion as defaultAnswerQuestion } from './aiAgentService.js';
+import * as defaultTokenService from './tokenService.js';
 import { XAccountData, AIAgent, Token, MentionType, APIResponse } from '../types/index.js';
+
+interface AIService {
+  createAIAgent: typeof defaultCreateAIAgent;
+  answerQuestion: typeof defaultAnswerQuestion;
+}
+
+const defaultAIService: AIService = {
+  createAIAgent: defaultCreateAIAgent,
+  answerQuestion: defaultAnswerQuestion
+};
 // Mock Twitter functionality temporarily disabled
 
 function detectMentionType(mentionText: string): MentionType {
@@ -18,17 +28,20 @@ function detectMentionType(mentionText: string): MentionType {
   return hasTokenCreationKeyword ? MentionType.TOKEN_CREATION : MentionType.QUESTION;
 }
 
-async function answerXMentionQuestion(accountData: XAccountData): Promise<APIResponse<{ agent: AIAgent; answer: string }>> {
+async function answerXMentionQuestion(
+  accountData: XAccountData,
+  aiService: AIService = defaultAIService
+): Promise<APIResponse<{ agent: AIAgent; answer: string }>> {
   try {
     if (!accountData.mentionText) {
       throw new Error('Mention text is required');
     }
 
     // Create or get AI agent for the user
-    const agent = await createAIAgent(accountData);
+    const agent = await aiService.createAIAgent(accountData);
     
     // Get answer using Llama3.3 model
-    const answer = await answerQuestion(agent, accountData.mentionText);
+    const answer = await aiService.answerQuestion(agent, accountData.mentionText);
 
     return {
       success: true,
@@ -48,7 +61,11 @@ async function answerXMentionQuestion(accountData: XAccountData): Promise<APIRes
   }
 }
 
-export async function handleXMention(mentionData: { accountData: XAccountData; creatorAddress: string }): Promise<APIResponse<{ agent: AIAgent; token?: Token; answer?: string; type: MentionType }>> {
+export async function handleXMention(
+  mentionData: { accountData: XAccountData; creatorAddress: string },
+  injectedTokenService = defaultTokenService,
+  injectedAIService: AIService = defaultAIService
+): Promise<APIResponse<{ agent: AIAgent; token?: Token; answer?: string; type: MentionType }>> {
   try {
     if (!mentionData.accountData.mentionText) {
       throw new Error('Mention text is required');
@@ -57,11 +74,11 @@ export async function handleXMention(mentionData: { accountData: XAccountData; c
     const mentionType = detectMentionType(mentionData.accountData.mentionText);
     
     // Create AI agent from X account data
-    const agent = await createAIAgent(mentionData.accountData);
+    const agent = await injectedAIService.createAIAgent(mentionData.accountData);
     
     if (mentionType === MentionType.TOKEN_CREATION) {
       // Create token for the AI agent
-      const token = await createToken(mentionData.accountData, mentionData.creatorAddress);
+      const token = await injectedTokenService.createToken(mentionData.accountData, mentionData.creatorAddress);
       return {
         success: true,
         data: {
@@ -73,7 +90,7 @@ export async function handleXMention(mentionData: { accountData: XAccountData; c
       };
     } else {
       // Handle question using Llama3.3 model
-      const questionResponse = await answerXMentionQuestion(mentionData.accountData);
+      const questionResponse = await answerXMentionQuestion(mentionData.accountData, injectedAIService);
       if (!questionResponse.success || !questionResponse.data) {
         return {
           success: false,

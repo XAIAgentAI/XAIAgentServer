@@ -44,13 +44,13 @@
     "@types/mongoose": "^5.11.96",
     "@types/node": "^20.10.5",
     "@types/node-cron": "^3.0.11",
-    "@types/sinon": "^17.0.2",
+    "@types/sinon": "^17.0.3",
     "chai": "^4.5.0",
     "ethereum-waffle": "^4.0.10",
     "hardhat": "^2.22.17",
     "mocha": "^10.2.0",
     "nodemon": "^3.0.2",
-    "sinon": "^17.0.1",
+    "sinon": "^17.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

@@ -123,8 +123,14 @@ export interface Token {
   symbol: string;
   creatorAddress: string;
   totalSupply: string;
-  initialPriceUSD: number;
+  initialPriceUSD: string;
   poolAddress?: string;
+}
+
+export interface TokenResponse {
+  success: boolean;
+  data: Token;
+  error?: string;
 }
 
 export interface DBCSwapPool {
@@ -178,18 +184,25 @@ export interface MatchingAnalysisResult extends PersonalAnalysisResult {
   paymentRequired?: boolean;
 }
 
-export type PaymentError = 
+export type SystemError = 
   | 'INSUFFICIENT_BALANCE'
   | 'INSUFFICIENT_ALLOWANCE'
   | 'NETWORK_ERROR'
   | 'TRANSACTION_FAILED'
   | 'CONTRACT_ERROR'
-  | 'ANALYSIS_ERROR';
+  | 'ANALYSIS_ERROR'
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'TOKEN_LIMIT_EXCEEDED'
+  | 'ANALYSIS_FAILED'
+  | 'AUTHENTICATION_ERROR';
+
+export type PaymentError = SystemError;
 
 export interface AnalysisResponse<T = PersonalAnalysisResult | MatchingAnalysisResult> {
   success: boolean;
   data?: T;
-  error?: PaymentError;
+  error?: SystemError;
+  message?: string;
   paymentRequired?: boolean;
   freeUsesLeft?: number;
   transactionHash?: string;
