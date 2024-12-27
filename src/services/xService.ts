@@ -7,11 +7,12 @@ interface AIService {
   answerQuestion: typeof defaultAnswerQuestion;
 }
 
+import TwitterClient from './twitterClient.js';
+
 const defaultAIService: AIService = {
   createAIAgent: defaultCreateAIAgent,
   answerQuestion: defaultAnswerQuestion
 };
-// Mock Twitter functionality temporarily disabled
 
 function detectMentionType(mentionText: string): MentionType {
   const tokenCreationKeywords = [
@@ -98,11 +99,15 @@ export async function handleXMention(
           timestamp: new Date().toISOString()
         };
       }
+      // Post response to Twitter
+      const answer = questionResponse.data.answer;
+      await TwitterClient.postResponse(answer, mentionData.accountData.tweetId);
+      
       return {
         success: true,
         data: {
           agent,
-          answer: questionResponse.data.answer,
+          answer,
           type: mentionType
         },
         timestamp: new Date().toISOString()

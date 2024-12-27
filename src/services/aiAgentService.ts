@@ -24,7 +24,7 @@ let _paymentService = defaultPaymentService;
 let _analysisCacheService = defaultAnalysisCacheService;
 let _decentralGPTClient: DecentralGPTClient = {
   async call(prompt: string, context: string): Promise<string> {
-    const response = await fetch(DECENTRALGPT_ENDPOINT.replace('/chat/completion', '/chat/completion/proxy'), {
+    const response = await fetch(DECENTRALGPT_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,9 +99,9 @@ export function injectDependencies(deps: {
   if (deps.decentralGPTClient) _decentralGPTClient = deps.decentralGPTClient;
 }
 
-const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://usa-chat.degpt.ai/api/v0/chat/completion';
+const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://www.decentralgpt.org/api/v0/chat/completion/proxy';
 const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
-const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3-70B';
+const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3.3';
 
 export function mergePersonalities(original: PersonalityAnalysis, incoming: PersonalityAnalysis): PersonalityAnalysis {
   return {

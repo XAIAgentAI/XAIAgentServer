@@ -22,13 +22,6 @@ export enum MentionType {
   QUESTION = 'QUESTION'
 }
 
-export interface XAccountData {
-  id: string;
-  profile: XProfile;
-  tweets: XTweet[];
-  mentionText?: string;
-}
-
 // AI Agent Types
 export interface PersonalityAnalysis {
   mbti: string;

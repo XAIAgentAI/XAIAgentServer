@@ -1,7 +1,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { handleXMention } from '../services/xService.js';
-import { XAccountData, MentionType } from '../types/index.js';
+import { MentionType } from '../types/index.js';
+import { XAccountData, TwitterAPIError } from '../types/twitter.js';
 
 const router = express.Router();
 
@@ -46,14 +47,68 @@ const mentionTypeLimiter = async (req: express.Request, res: express.Response, n
   }
 };
 
-router.post('/x-mention', mentionTypeLimiter, async (req: express.Request, res: express.Response) => {
+// Middleware to validate mention data
+const validateMentionData = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const { accountData } = req.body;
+  
+  if (!accountData?.id || !accountData?.username || !accountData?.mentionText) {
+    return res.status(400).json({ 
+      error: 'Invalid mention data',
+      details: 'Missing required fields: id, username, or mentionText'
+    });
+  }
+
+  // Extract tweetId from the request
+  if (req.body.tweetId) {
+    req.body.accountData.tweetId = req.body.tweetId;
+  }
+
+  next();
+};
+
+router.post('/x-mention', [validateMentionData, mentionTypeLimiter], async (req: express.Request, res: express.Response) => {
   try {
+    console.log('Received X mention:', {
+      name: req.body.accountData.name,
+      tweetId: req.body.accountData.tweetId,
+      mentionText: req.body.accountData.mentionText
+    });
+
     const mentionData: { accountData: XAccountData; creatorAddress: string } = req.body;
     const result = await handleXMention(mentionData);
+
+    // Log the response
+    console.log('Processed X mention:', {
+      name: mentionData.accountData.name,
+      success: result.success,
+      type: result.data?.type
+    });
+
     res.json(result);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error handling X mention:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    
+    const err = error as TwitterAPIError;
+    
+    // Handle specific error types
+    if (err.message?.includes('rate limit')) {
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded',
+        retryAfter: err.retryAfter || 60
+      });
+    }
+    
+    if (err.message?.includes('Twitter API')) {
+      return res.status(502).json({ 
+        error: 'Twitter API error',
+        details: err.message
+      });
+    }
+
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 
