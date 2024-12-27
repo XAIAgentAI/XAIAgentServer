@@ -14,7 +14,40 @@ class TwitterClient {
           v2: {
             tweet: async (text: string) => ({ data: { id: 'mock-tweet-id' } }),
             reply: async (text: string, reply_to: string) => ({ data: { id: 'mock-reply-id' } }),
-            userTimeline: async () => ({ data: { data: [] } })
+            userByUsername: async (username: string) => ({
+              data: {
+                id: 'mock-user-id',
+                username: username,
+                name: 'Mock User',
+                profile_image_url: 'https://example.com/mock-profile.jpg'
+              }
+            }),
+            userTimeline: async (userId: string) => ({
+              data: {
+                data: [
+                  {
+                    id: 'mock-tweet-1',
+                    text: 'Mock tweet 1',
+                    created_at: new Date().toISOString(),
+                    referenced_tweets: []
+                  }
+                ],
+                includes: {
+                  users: [{
+                    id: userId,
+                    username: 'mock_user',
+                    name: 'Mock User',
+                    profile_image_url: 'https://example.com/mock-profile.jpg',
+                    description: 'Mock user description',
+                    public_metrics: {
+                      followers_count: 100,
+                      following_count: 50
+                    }
+                  }],
+                  media: []
+                }
+              }
+            })
           }
         } as any;
       } else {

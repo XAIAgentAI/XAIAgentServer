@@ -27,13 +27,29 @@ export class TweetService {
       console.error('Failed to initialize Twitter client:', error);
       // Return mock client for testing
       this.client = {
-        getTweetApi: () => ({
-          getUserTweets: async () => ({
+        v2: {
+          userByUsername: async () => ({
+            data: { id: 'mock_user_id' }
+          }),
+          userTimeline: async () => ({
             data: {
-              data: []
+              data: [],
+              includes: {
+                users: [{
+                  id: 'mock_user_id',
+                  username: 'mock_user',
+                  name: 'Mock User',
+                  profile_image_url: 'https://example.com/image.jpg',
+                  description: 'Mock description',
+                  public_metrics: {
+                    followers_count: 100,
+                    following_count: 50
+                  }
+                }]
+              }
             }
           })
-        })
+        }
       };
     }
   }
@@ -63,14 +79,49 @@ export class TweetService {
     return updates;
   }
 
-  private async fetchUserTweets(userHandle: string): Promise<Tweet[]> {
+  public async fetchUserTweets(userHandle: string): Promise<Tweet[]> {
     try {
-      const response = await this.client.getTweetApi().getUserTweets({
-        userId: userHandle,
-        count: 100
+      console.log(`Fetching tweets for user: ${userHandle}`);
+      // First get the user ID from the username
+      const userResponse = await this.client.v2.userByUsername(userHandle);
+      if (!userResponse?.data?.id) {
+        throw new Error(`User not found: ${userHandle}`);
+      }
+
+      const userId = userResponse.data.id;
+      const response = await this.client.v2.userTimeline(userId, {
+        max_results: 100,
+        'tweet.fields': ['created_at', 'text', 'referenced_tweets'],
+        'user.fields': ['name', 'username', 'profile_image_url', 'description', 'public_metrics'],
+        'media.fields': ['url', 'preview_image_url', 'type'],
+        'expansions': ['author_id', 'attachments.media_keys']
       });
 
-      return this.processTweets(response.data.data);
+      if (!response?.data?.data) {
+        return [];
+      }
+
+      const tweets = response.data.data;
+      const users = response.includes?.users || [];
+      const user = users[0];
+      const media = response.includes?.media || [];
+      
+      console.log('Raw tweets data:', JSON.stringify(tweets, null, 2));
+      console.log('Users data:', JSON.stringify(users, null, 2));
+      console.log('Media data:', JSON.stringify(media, null, 2));
+
+      return this.processTweets(tweets.map((tweet: any) => ({
+        ...tweet,
+        user: user ? {
+          screenName: user.username,
+          name: user.name,
+          profileImageUrl: user.profile_image_url,
+          description: user.description,
+          followersCount: user.public_metrics?.followers_count,
+          friendsCount: user.public_metrics?.following_count
+        } : undefined,
+        media: media.filter((m: any) => tweet.attachments?.media_keys?.includes(m.media_key))
+      })));
     } catch (error: any) {
       console.error(`Error fetching tweets for user ${userHandle}:`, error);
       if (error.code === 'RATE_LIMIT_EXCEEDED') {
@@ -101,51 +152,37 @@ export class TweetService {
   protected processTweets(tweets: any[]): Tweet[] {
     try {
       // First filter and map tweets
+      if (!Array.isArray(tweets)) {
+        console.warn('processTweets received non-array input:', tweets);
+        return [];
+      }
+
       let processedTweets = tweets
-        .filter(tweet => {
-        // Filter out retweets and quotes
-        const isRetweet = !tweet.referenced_tweets || tweet.referenced_tweets.length === 0;
-        const isQuoteStatus = get(tweet, 'raw.result.legacy.isQuoteStatus');
-        const fullText = get(tweet, 'raw.result.legacy.fullText', '');
-        
-        return !isRetweet && !isQuoteStatus && !fullText.includes('RT @');
-      })
-      .map(tweet => {
-        const user = {
-          screenName: get(tweet, 'user.legacy.screenName'),
-          name: get(tweet, 'user.legacy.name'),
-          profileImageUrl: get(tweet, 'user.legacy.profileImageUrlHttps'),
-          description: get(tweet, 'user.legacy.description'),
-          followersCount: get(tweet, 'user.legacy.followersCount'),
-          friendsCount: get(tweet, 'user.legacy.friendsCount'),
-          location: get(tweet, 'user.legacy.location')
-        };
+        .filter((tweet: any) => {
+          // Filter out retweets and quotes
+          const isRetweet = tweet.referenced_tweets?.some((ref: any) => ref.type === 'retweeted') || false;
+          const isQuote = tweet.referenced_tweets?.some((ref: any) => ref.type === 'quoted') || false;
+          return !isRetweet && !isQuote && !tweet.text?.startsWith('RT @');
+        })
+        .map((tweet: any) => {
+          const images = tweet.media
+            ?.filter((media: any) => media.type === 'photo')
+            .map((media: any) => media.url) || [];
 
-        const mediaItems = get(tweet, 'raw.result.legacy.extendedEntities.media', []);
-        const images = mediaItems
-          .filter((media: any) => media.type === 'photo')
-          .map((media: any) => media.mediaUrlHttps);
-
-        const videos = mediaItems
-          .filter((media: any) => media.type === 'video' || media.type === 'animated_gif')
-          .map((media: any) => {
-            const variants = get(media, 'videoInfo.variants', []);
-            const bestQuality = variants
-              .filter((v: any) => v.contentType === 'video/mp4')
-              .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-            return bestQuality?.url;
-          })
-          .filter(Boolean);
+          const videos = tweet.media
+            ?.filter((media: any) => media.type === 'video' || media.type === 'animated_gif')
+            .map((media: any) => media.url)
+            .filter(Boolean) || [];
 
         return {
-          id: get(tweet, 'raw.result.legacy.idStr'),
-          text: get(tweet, 'raw.result.legacy.fullText'),
-          createdAt: get(tweet, 'raw.result.legacy.createdAt'),
-          user,
+          id: tweet.id,
+          text: tweet.text || '',
+          createdAt: tweet.created_at,
+          user: tweet.user,
           images,
           videos,
-          url: `https://x.com/${user.screenName}/status/${get(tweet, 'raw.result.legacy.idStr')}`,
-          tokenCount: this.countTokensInTweet(get(tweet, 'raw.result.legacy.fullText', ''))
+          url: `https://x.com/${tweet.user?.screenName || 'unknown'}/status/${tweet.id}`,
+          tokenCount: this.countTokensInTweet(tweet.text || '')
         };
       });
 

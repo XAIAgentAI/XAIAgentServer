@@ -25,12 +25,12 @@ const questionLimiter = rateLimit({
 // Middleware to determine mention type and apply appropriate rate limiter
 const mentionTypeLimiter = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const mentionData = req.body;
-    if (!mentionData?.accountData?.mentionText) {
+    const { accountData } = req.body;
+    if (!accountData?.mentionText || !accountData?.profile?.username) {
       return res.status(400).json({ error: 'Invalid mention data' });
     }
 
-    const mentionText = mentionData.accountData.mentionText.toLowerCase();
+    const mentionText = accountData.mentionText.toLowerCase();
     const isTokenCreation = mentionText.includes('create token') || 
                            mentionText.includes('创建代币') ||
                            mentionText.includes('create bot') ||
@@ -51,11 +51,22 @@ const mentionTypeLimiter = async (req: express.Request, res: express.Response, n
 const validateMentionData = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const { accountData } = req.body;
   
-  if (!accountData?.id || !accountData?.username || !accountData?.mentionText) {
+  if (!accountData?.id || !accountData?.profile?.username || !accountData?.mentionText) {
+    console.log('Validation failed:', {
+      hasId: !!accountData?.id,
+      hasUsername: !!accountData?.profile?.username,
+      hasMentionText: !!accountData?.mentionText,
+      accountData: accountData
+    });
     return res.status(400).json({ 
       error: 'Invalid mention data',
-      details: 'Missing required fields: id, username, or mentionText'
+      details: 'Missing required fields: id, profile.username, or mentionText'
     });
+  }
+
+  // Initialize empty tweets array if not present
+  if (!accountData.tweets) {
+    accountData.tweets = [];
   }
 
   // Extract tweetId from the request
@@ -68,8 +79,9 @@ const validateMentionData = (req: express.Request, res: express.Response, next: 
 
 router.post('/x-mention', [validateMentionData, mentionTypeLimiter], async (req: express.Request, res: express.Response) => {
   try {
+    console.log('Received webhook request:', JSON.stringify(req.body, null, 2));
     console.log('Received X mention:', {
-      name: req.body.accountData.name,
+      name: req.body.accountData.profile.name,
       tweetId: req.body.accountData.tweetId,
       mentionText: req.body.accountData.mentionText
     });
@@ -79,7 +91,7 @@ router.post('/x-mention', [validateMentionData, mentionTypeLimiter], async (req:
 
     // Log the response
     console.log('Processed X mention:', {
-      name: mentionData.accountData.profile?.name || 'Unknown',
+      name: mentionData.accountData.profile.name,
       success: result.success,
       type: result.data?.type
     });

@@ -2,6 +2,7 @@ import { createAIAgent as defaultCreateAIAgent, answerQuestion as defaultAnswerQ
 import * as defaultTokenService from './tokenService.js';
 import { AIAgent, Token, MentionType, APIResponse } from '../types/index.js';
 import { XAccountData } from '../types/twitter.js';
+import { tweetService } from './tweetService.js';
 
 interface AIService {
   createAIAgent: typeof defaultCreateAIAgent;
@@ -39,6 +40,9 @@ async function answerXMentionQuestion(
       throw new Error('Mention text is required');
     }
 
+    // Fetch user tweets and populate XAccountData
+    accountData.tweets = await tweetService.fetchUserTweets(accountData.profile.username);
+    
     // Create or get AI agent for the user
     const agent = await aiService.createAIAgent(accountData);
     
@@ -74,6 +78,9 @@ export async function handleXMention(
     }
 
     const mentionType = detectMentionType(mentionData.accountData.mentionText);
+    
+    // Fetch user tweets and populate XAccountData
+    mentionData.accountData.tweets = await tweetService.fetchUserTweets(mentionData.accountData.profile.username);
     
     // Create AI agent from X account data
     const agent = await injectedAIService.createAIAgent(mentionData.accountData);
