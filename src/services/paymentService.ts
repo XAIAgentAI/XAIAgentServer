@@ -1,6 +1,6 @@
 import { ethers, parseUnits, Contract, JsonRpcProvider } from 'ethers';
-import { UserAnalytics } from '../types';
-import { userAnalyticsService } from './userAnalyticsService';
+import { UserAnalytics } from '../types/index.js';
+import { userAnalyticsService } from './userAnalyticsService.js';
 
 export const paymentService = {
   checkXAABalance,
@@ -8,6 +8,8 @@ export const paymentService = {
   getXAAApprovalStatus,
   validateAndProcessPayment
 };
+
+export { validateAndProcessPayment };
 
 // XAA token contract ABI (minimal interface for balance and transfer)
 const XAA_ABI = [
@@ -35,7 +37,7 @@ if (!XAA_CONTRACT_ADDRESS || !PLATFORM_WALLET_ADDRESS) {
   throw new Error('Missing required environment variables for XAA payment processing');
 }
 
-import { PaymentError } from '../types';
+import { PaymentError } from '../types/index.js';
 
 // Retry configuration
 const MAX_RETRIES = 3;
@@ -198,8 +200,8 @@ async function getXAAApprovalStatus(userAddress: string): Promise<{
  * @returns Object containing payment status and any error messages
  */
 async function validateAndProcessPayment(
-  userId: string,
-  tokenAmount: number = 1
+  userAddress: string,
+  analytics: UserAnalytics
 ): Promise<{
   success: boolean;
   error?: PaymentError;
@@ -211,7 +213,7 @@ async function validateAndProcessPayment(
   transactionHash?: string;
 }> {
   try {
-    const userAddress = userId; // In this version, userId is the wallet address
+    // userAddress is already passed in directly
     
     // Check XAA balance
     const balanceCheck = await checkXAABalance(userAddress);

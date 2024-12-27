@@ -8,17 +8,18 @@ import {
   searchAndOrganizeContent,
   analyzePersonality,
   analyzeMatching
-} from '../services/aiAgentService';
-import { getCachedAnalysis, cacheAnalysis } from '../services/analysisCacheService';
-import { validateAndProcessPayment } from '../services/paymentService';
-import { getOrCreateUserAnalytics, recordAnalysis } from '../services/userAnalyticsService';
+} from '../services/aiAgentService.js';
+import { getCachedAnalysis, cacheAnalysis } from '../services/analysisCacheService.js';
+import { paymentService } from '../services/paymentService.js';
+import { userAnalyticsService } from '../services/userAnalyticsService.js';
 import { 
-  XAccountData, 
   APIResponse, 
   AnalysisRequest,
   PersonalAnalysisResult,
-  MatchingAnalysisResult 
-} from '../types';
+  MatchingAnalysisResult,
+  AIAgent
+} from '../types/index.js';
+import { XAccountData } from '../types/twitter.js';
 import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
@@ -45,7 +46,7 @@ router.post('/analyze/personal', async (req: express.Request, res: express.Respo
     }
 
     // Record personal analysis
-    await recordAnalysis(
+    await userAnalyticsService.recordAnalysis(
       userId,
       'personal',
       {
@@ -68,11 +69,14 @@ router.post('/analyze/personal', async (req: express.Request, res: express.Respo
     const result = await analyzePersonality(xAccountData);
     
     // Cache the results
-    cacheAnalysis(userId, 'personal', result);
+    if (result.success && result.data) {
+      cacheAnalysis(userId, 'personal', result.data);
+    }
     
     const response: APIResponse<PersonalAnalysisResult> = {
-      success: true,
-      data: result,
+      success: result.success,
+      data: result.data,
+      error: result.error,
       timestamp: new Date().toISOString()
     };
     
@@ -113,10 +117,10 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
     }
 
     // Get user analytics to check free uses
-    const analytics = await getOrCreateUserAnalytics(userId);
+    const analytics = await userAnalyticsService.getOrCreateUserAnalytics(userId);
 
     // Validate and process payment if needed
-    const paymentResult = await validateAndProcessPayment(userAddress, analytics);
+    const paymentResult = await paymentService.validateAndProcessPayment(userAddress, analytics);
     
     if (!paymentResult.success) {
       return res.status(402).json({
@@ -131,15 +135,11 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
     }
 
     // Record matching analysis
-    await recordAnalysis(
-      userId,
-      'matching',
-      {
-        targetUserId,
-        timestamp: new Date().toISOString(),
-        usedFreeCredit: analytics.freeMatchingUsesLeft > 0
-      }
-    );
+    await userAnalyticsService.recordAnalysis(userId, 'matching', {
+      targetUserId,
+      timestamp: new Date().toISOString(),
+      usedFreeCredit: analytics.freeMatchingUsesLeft > 0
+    });
 
     // Perform matching analysis
     // Check cache first
@@ -157,21 +157,46 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
     const result = await analyzeMatching(userXAccountData, targetXAccountData);
     
     // Cache the results
-    cacheAnalysis(userId, 'matching', result, targetUserId);
+    if (result.success && result.data) {
+      cacheAnalysis(userId, 'matching', result.data, targetUserId);
+    }
 
-    const response: APIResponse<MatchingAnalysisResult> = {
-      success: true,
-      data: result,
-      timestamp: new Date().toISOString()
+    // Create response with matching analysis result
+    const matchingResult: MatchingAnalysisResult = result.data ? {
+      ...result.data,
+      transactionHash: paymentResult.transactionHash,
+      commonInterests: (result.data as MatchingAnalysisResult).commonInterests || [],
+      compatibilityDetails: (result.data as MatchingAnalysisResult).compatibilityDetails || {
+        values: 0,
+        communication: 0,
+        interests: 0
+      },
+      personalityTraits: result.data.personalityTraits || {},
+      interests: result.data.interests || [],
+      writingStyle: result.data.writingStyle || {},
+      topicPreferences: result.data.topicPreferences || [],
+      matchScore: (result.data as MatchingAnalysisResult).matchScore || 0
+    } : {
+      personalityTraits: {},
+      interests: [],
+      writingStyle: {},
+      topicPreferences: [],
+      matchScore: 0,
+      commonInterests: [],
+      compatibilityDetails: {
+        values: 0,
+        communication: 0,
+        interests: 0
+      },
+      transactionHash: paymentResult.transactionHash
     };
 
-    // Include transaction hash if payment was made
-    if (paymentResult.transactionHash) {
-      response.data = {
-        ...result,
-        transactionHash: paymentResult.transactionHash
-      };
-    }
+    const response: APIResponse<MatchingAnalysisResult> = {
+      success: result.success,
+      data: matchingResult,
+      error: result.error,
+      timestamp: new Date().toISOString()
+    };
 
     res.json(response);
   } catch (error) {
@@ -369,11 +394,12 @@ router.post('/:agentId/train', async (req, res) => {
 });
 
 // Temporary function until database is implemented
-async function getAgentFromDb(agentId: string) {
+async function getAgentFromDb(agentId: string): Promise<AIAgent> {
   // TODO: Implement database integration
   return {
     id: agentId,
     xAccountId: 'dummy',
+    xHandle: 'XAIAgentAI',
     personality: {
       mbti: 'INTJ',
       traits: ['analytical', 'strategic'],
@@ -382,7 +408,8 @@ async function getAgentFromDb(agentId: string) {
       communicationStyle: {
         primary: 'direct',
         strengths: ['clarity', 'precision'],
-        weaknesses: ['brevity']
+        weaknesses: ['brevity'],
+        languages: ['en', 'zh']
       },
       professionalAptitude: {
         industries: ['tech', 'research'],

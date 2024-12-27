@@ -1,5 +1,5 @@
-import { getUserAgentAccounts, trainAIAgent } from '../services/aiAgentService';
-import { tweetService } from '../services/tweetService';
+import { getUserAgentAccounts, trainAIAgent } from '../services/aiAgentService.js';
+import { tweetService } from '../services/tweetService.js';
 
 let schedulerInterval: NodeJS.Timeout;
 
@@ -40,7 +40,9 @@ async function fetchAndProcessTweets() {
         }
         
         // Train AI agent with new tweets
-        await trainAIAgent(account.agentId, { tweets });
+        if (agentUpdate?.tweets) {
+          await trainAIAgent(account.agentId, { tweets: agentUpdate.tweets });
+        }
         
         processedCount++;
         console.log(`[TweetScheduler] Updated training data for agent ${account.agentId}`);

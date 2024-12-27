@@ -3,7 +3,7 @@ import {
   MatchingAnalysisResult, 
   AnalysisResponse,
   AnalysisType
-} from '../types';
+} from '../types/index.js';
 
 interface AnalysisCache {
   userId: string;
@@ -113,3 +113,5 @@ export const analysisCacheService = {
   getCachedAnalysis,
   cacheAnalysis
 };
+
+export { getCachedAnalysis, cacheAnalysis };

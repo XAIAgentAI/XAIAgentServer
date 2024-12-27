@@ -1,6 +1,6 @@
 import { ethers, Contract, JsonRpcProvider } from 'ethers';
-import { DRC20_ABI } from '../constants/abis';
-import { DBCSwapPool, SystemError } from '../types/index';
+import { DRC20_ABI } from '../constants/abis.js';
+import { DBCSwapPool, SystemError } from '../types/index.js';
 
 export class DBCSwapService {
   private provider: JsonRpcProvider;

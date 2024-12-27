@@ -1,7 +1,7 @@
-import { Tweet, TweetFetchResult, AgentTweetUpdate } from '../types/twitter';
-import { AIAgent } from '../types/index';
-import TwitterClient from './twitterClient';
-import { getUserAgentAccounts } from './aiAgentService';
+import { Tweet, TweetFetchResult, AgentTweetUpdate } from '../types/twitter.js';
+import { AIAgent } from '../types/index.js';
+import TwitterClient from './twitterClient.js';
+import { getUserAgentAccounts } from './aiAgentService.js';
 import lodash from 'lodash';
 import dayjsLib from 'dayjs';
 const { get } = lodash;

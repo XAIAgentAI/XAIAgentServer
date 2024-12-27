@@ -175,6 +175,7 @@ export interface MatchingAnalysisResult extends PersonalAnalysisResult {
   success?: boolean;
   error?: string;
   paymentRequired?: boolean;
+  transactionHash?: string;
 }
 
 export type SystemError = 

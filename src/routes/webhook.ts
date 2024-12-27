@@ -79,7 +79,7 @@ router.post('/x-mention', [validateMentionData, mentionTypeLimiter], async (req:
 
     // Log the response
     console.log('Processed X mention:', {
-      name: mentionData.accountData.name,
+      name: mentionData.accountData.profile?.name || 'Unknown',
       success: result.success,
       type: result.data?.type
     });

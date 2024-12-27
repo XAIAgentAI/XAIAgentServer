@@ -6,12 +6,12 @@ import {
   MatchingAnalysisResult,
   AnalysisResponse,
   SystemError
-} from '../types';
+} from '../types/index.js';
 import { XAccountData, Tweet } from '../types/twitter.js';
 // Allow dependency injection for testing
-import { userAnalyticsService as defaultUserAnalyticsService } from './userAnalyticsService';
-import { paymentService as defaultPaymentService } from './paymentService';
-import { analysisCacheService as defaultAnalysisCacheService } from './analysisCacheService';
+import { userAnalyticsService as defaultUserAnalyticsService } from './userAnalyticsService.js';
+import { paymentService as defaultPaymentService } from './paymentService.js';
+import { analysisCacheService as defaultAnalysisCacheService } from './analysisCacheService.js';
 import fetch from 'node-fetch';
 
 // Define DecentralGPT client interface
@@ -416,7 +416,10 @@ export async function analyzePersonality(xAccountData: XAccountData): Promise<An
   let analysisRecord;
   
   try {
-    analysisRecord = await _userAnalyticsService.recordAnalysis(xAccountData.id, 'personal');
+    analysisRecord = await _userAnalyticsService.recordAnalysis(xAccountData.id, 'personal', {
+      timestamp: new Date().toISOString(),
+      usedFreeCredit: false
+    });
     
     // Check cache
     const cachedResponse = await _analysisCacheService.getCachedAnalysis(xAccountData.id, 'personal');
@@ -473,7 +476,10 @@ export async function analyzePersonality(xAccountData: XAccountData): Promise<An
     };
   } catch (error: any) {
     if (!analysisRecord) {
-      analysisRecord = await _userAnalyticsService.recordAnalysis(xAccountData.id, 'personal');
+      analysisRecord = await _userAnalyticsService.recordAnalysis(xAccountData.id, 'personal', {
+        timestamp: new Date().toISOString(),
+        usedFreeCredit: false
+      });
     }
     const errorMessage = error.message || 'Unknown error occurred';
     console.error('Error analyzing personality:', error);
@@ -517,12 +523,16 @@ export async function analyzeMatching(
     const userAnalytics = await _userAnalyticsService.getOrCreateUserAnalytics(userXAccountData.id);
     
     // Check user analytics and free credits
-    const analysisRecord = await _userAnalyticsService.recordAnalysis(userXAccountData.id, 'matching', targetXAccountData.id);
+    const analysisRecord = await _userAnalyticsService.recordAnalysis(userXAccountData.id, 'matching', {
+      targetUserId: targetXAccountData.id,
+      timestamp: new Date().toISOString(),
+      usedFreeCredit: false
+    });
 
     // If analysis requires payment (either failed or explicitly requires it)
     if (analysisRecord.paymentRequired || !analysisRecord.success) {
       // Always attempt payment in this case
-      const paymentResult = await _paymentService.validateAndProcessPayment(userXAccountData.id, 1); // 1 XAA token
+      const paymentResult = await _paymentService.validateAndProcessPayment(userXAccountData.id, userAnalytics);
       
       // Return error if either payment failed or analysis failed
       if (!paymentResult.success || !analysisRecord.success) {

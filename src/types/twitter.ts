@@ -1,4 +1,4 @@
-import { AIAgent } from './index';
+import { AIAgent } from './index.js';
 
 export interface TwitterUser {
   screenName: string;

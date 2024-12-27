@@ -1,8 +1,8 @@
 import { ethers, Contract, JsonRpcProvider, Wallet, ContractFactory, parseUnits, formatUnits } from 'ethers';
-import { TokenMetadata, Token } from '../types/index';
+import { TokenMetadata, Token } from '../types/index.js';
 import { XAccountData } from '../types/twitter.js';
-import { DBCSwapService } from './dbcSwapService';
-import { DRC20_ABI } from '../constants/abis';
+import { DBCSwapService } from './dbcSwapService.js';
+import { DRC20_ABI } from '../constants/abis.js';
 
 const TOTAL_SUPPLY = parseUnits('100000000000', 18); // 100 billion tokens
 const TARGET_FDV_USD = 100_000; // $100k USD initial FDV

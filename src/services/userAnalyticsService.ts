@@ -1,4 +1,4 @@
-import { UserAnalytics, AnalysisType, AnalysisRecord, AnalysisResponse, PaymentError } from '../types';
+import { UserAnalytics, AnalysisType, AnalysisRecord, AnalysisResponse, PaymentError } from '../types/index.js';
 
 // Temporary in-memory storage until database integration
 export const userAnalyticsService = {
@@ -6,6 +6,8 @@ export const userAnalyticsService = {
   recordAnalysis,
   recordSuccessfulPayment
 };
+
+export { getOrCreateUserAnalytics, recordAnalysis };
 const userAnalyticsStore: Map<string, UserAnalytics> = new Map();
 
 /**
@@ -42,7 +44,11 @@ async function getOrCreateUserAnalytics(userId: string): Promise<UserAnalytics> 
 async function recordAnalysis(
   userId: string,
   analysisType: AnalysisType,
-  targetUserId?: string
+  analysisData: {
+    targetUserId?: string;
+    timestamp: string;
+    usedFreeCredit: boolean;
+  }
 ): Promise<AnalysisResponse> {
   const analytics = await getOrCreateUserAnalytics(userId);
   const timestamp = new Date().toISOString();
@@ -51,8 +57,8 @@ async function recordAnalysis(
   if (analysisType === 'personal') {
     const record: AnalysisRecord = {
       type: analysisType,
-      timestamp,
-      usedFreeCredit: false
+      timestamp: analysisData.timestamp,
+      usedFreeCredit: analysisData.usedFreeCredit
     };
     analytics.analysisHistory.push(record);
     analytics.lastAnalysisDate = timestamp;
@@ -69,9 +75,9 @@ async function recordAnalysis(
     // Use a free credit
     const record: AnalysisRecord = {
       type: analysisType,
-      timestamp,
-      targetUserId,
-      usedFreeCredit: true
+      timestamp: analysisData.timestamp,
+      targetUserId: analysisData.targetUserId,
+      usedFreeCredit: analysisData.usedFreeCredit
     };
     
     analytics.freeMatchingUsesLeft--;
