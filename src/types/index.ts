@@ -6,15 +6,15 @@ export interface XTweet {
 }
 
 export interface XProfile {
-  id: string;
   username: string;
-  displayName: string;
-  bio: string;
-  metrics: {
-    followers: number;
-    following: number;
-    tweets: number;
-  };
+  name: string;
+  description?: string;
+  profileImageUrl?: string;
+  followersCount?: number;
+  followingCount?: number;
+  tweetCount?: number;
+  createdAt?: string;
+  lastTweetAt?: string;
 }
 
 export enum MentionType {

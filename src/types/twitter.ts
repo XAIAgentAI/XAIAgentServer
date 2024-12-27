@@ -38,11 +38,9 @@ export interface AgentTweetUpdate {
   lastFetchTime: string;
 }
 
-export interface XAccountData {
-  id: string;
+export interface XProfile {
   username: string;
   name: string;
-  mentionText?: string;
   description?: string;
   profileImageUrl?: string;
   followersCount?: number;
@@ -50,5 +48,12 @@ export interface XAccountData {
   tweetCount?: number;
   createdAt?: string;
   lastTweetAt?: string;
+}
+
+export interface XAccountData {
+  id: string;
+  profile: XProfile;
+  tweets: Tweet[];
+  mentionText?: string;
   tweetId?: string;  // ID of the tweet that mentioned @XAIAgentAI
 }

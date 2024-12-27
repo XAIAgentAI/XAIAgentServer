@@ -1,5 +1,6 @@
 import { ethers, Contract, JsonRpcProvider, Wallet, ContractFactory, parseUnits, formatUnits } from 'ethers';
-import { XAccountData, TokenMetadata, Token } from '../types/index';
+import { TokenMetadata, Token } from '../types/index';
+import { XAccountData } from '../types/twitter.js';
 import { DBCSwapService } from './dbcSwapService';
 import { DRC20_ABI } from '../constants/abis';
 

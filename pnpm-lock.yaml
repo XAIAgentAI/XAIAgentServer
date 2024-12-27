@@ -41,6 +41,9 @@ importers:
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
+      twitter-api-v2:
+        specifier: ^1.15.1
+        version: 1.19.0
     devDependencies:
       '@nomicfoundation/hardhat-ethers':
         specifier: ^3.0.0
@@ -2888,6 +2891,9 @@ packages:
 
   tweetnacl@1.0.3:
     resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
+  twitter-api-v2@1.19.0:
+    resolution: {integrity: sha512-jfG4aapNPM9+4VxNxn0TXvD8Qj8NmVx6cY0hp5K626uZ41qXPaJz33Djd3y6gfHF/+W29+iZz0Y5qB869d/akA==}
 
   type-check@0.3.2:
     resolution: {integrity: sha512-ZCmOJdvOWDBYJlzAoFkC+Q0+bUyEOS1ltgp1MGU03fqHG+dbi9tBFU2Rd9QKiDZFAYrhPh2JUf7rZRIuHRKtOg==}
@@ -6526,6 +6532,8 @@ snapshots:
   tweetnacl@0.14.5: {}
 
   tweetnacl@1.0.3: {}
+
+  twitter-api-v2@1.19.0: {}
 
   type-check@0.3.2:
     dependencies:

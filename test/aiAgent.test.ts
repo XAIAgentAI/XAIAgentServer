@@ -53,13 +53,13 @@ let decentralGPTStub: sinon.SinonStub;
 // Import types
 
 import { 
-  XAccountData, 
   PersonalAnalysisResult, 
   MatchingAnalysisResult, 
   UserAnalytics, 
   AnalysisResponse,
   CacheResponse
 } from '../src/types/index.js';
+import { XAccountData } from '../src/types/twitter.js';
 
 describe('AI Agent Analysis Tests', () => {
   // Create sandbox and stubs for all services
@@ -175,21 +175,33 @@ describe('AI Agent Analysis Tests', () => {
     const mockXAccountData: XAccountData = {
       id: 'user123',
       profile: {
-        id: 'user123',
         username: 'testuser',
-        displayName: 'Test User',
-        bio: 'Test bio',
-        metrics: {
-          followers: 100,
-          following: 50,
-          tweets: 200
-        }
+        name: 'Test User',
+        description: 'Test bio',
+        profileImageUrl: 'https://example.com/profile.jpg',
+        followersCount: 100,
+        followingCount: 50,
+        tweetCount: 200,
+        createdAt: '2024-02-25T00:00:00Z',
+        lastTweetAt: '2024-02-25T00:00:00Z'
       },
       tweets: [
         {
           id: 'tweet1',
           text: 'Test tweet 1',
-          createdAt: '2024-02-25T00:00:00Z'
+          createdAt: '2024-02-25T00:00:00Z',
+          user: {
+            screenName: 'testuser',
+            name: 'Test User',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            description: 'Test bio',
+            followersCount: 100,
+            friendsCount: 50,
+            location: 'Test Location'
+          },
+          images: [],
+          videos: [],
+          url: 'https://x.com/testuser/status/tweet1'
         }
       ]
     };
@@ -271,21 +283,33 @@ describe('AI Agent Analysis Tests', () => {
     const mockXAccountData: XAccountData = {
       id: 'user123',
       profile: {
-        id: 'user123',
         username: 'testuser',
-        displayName: 'Test User',
-        bio: 'Test bio',
-        metrics: {
-          followers: 100,
-          following: 50,
-          tweets: 200
-        }
+        name: 'Test User',
+        description: 'Test bio',
+        profileImageUrl: 'https://example.com/profile.jpg',
+        followersCount: 100,
+        followingCount: 50,
+        tweetCount: 200,
+        createdAt: '2024-02-25T00:00:00Z',
+        lastTweetAt: '2024-02-25T00:00:00Z'
       },
       tweets: [
         {
           id: 'tweet1',
           text: 'Test tweet 1',
-          createdAt: '2024-02-25T00:00:00Z'
+          createdAt: '2024-02-25T00:00:00Z',
+          user: {
+            screenName: 'testuser',
+            name: 'Test User',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            description: 'Test bio',
+            followersCount: 100,
+            friendsCount: 50,
+            location: 'Test Location'
+          },
+          images: [],
+          videos: [],
+          url: 'https://x.com/testuser/status/tweet1'
         }
       ]
     };

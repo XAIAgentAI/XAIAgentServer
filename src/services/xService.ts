@@ -1,6 +1,7 @@
 import { createAIAgent as defaultCreateAIAgent, answerQuestion as defaultAnswerQuestion } from './aiAgentService.js';
 import * as defaultTokenService from './tokenService.js';
-import { XAccountData, AIAgent, Token, MentionType, APIResponse } from '../types/index.js';
+import { AIAgent, Token, MentionType, APIResponse } from '../types/index.js';
+import { XAccountData } from '../types/twitter.js';
 
 interface AIService {
   createAIAgent: typeof defaultCreateAIAgent;

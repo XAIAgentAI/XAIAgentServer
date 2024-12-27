@@ -1,6 +1,6 @@
 import express from 'express';
 import { createToken } from '../services/tokenService.js';
-import { XAccountData } from '../types/index.js';
+import { XAccountData } from '../types/twitter.js';
 
 const router = express.Router();
 

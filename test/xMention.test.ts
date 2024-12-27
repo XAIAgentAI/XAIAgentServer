@@ -1,7 +1,8 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { handleXMention } from '../src/services/xService.js';
-import { MentionType, XAccountData, Token, TokenResponse, AIAgent } from '../src/types/index.js';
+import { MentionType, Token, TokenResponse, AIAgent } from '../src/types/index.js';
+import { XAccountData } from '../src/types/twitter.js';
 // Mock services for testing
 const mockTokenService = {
   createToken: undefined as any // Will be set in beforeEach
@@ -102,20 +103,37 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
-            id: '123456',
             username: 'testuser',
-            displayName: 'Test User',
-            bio: 'Test account for X mention handling',
-            metrics: {
-              followers: 100,
-              following: 200,
-              tweets: 500
-            }
+            name: 'Test User',
+            description: 'Test account for X mention handling',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            followersCount: 100,
+            followingCount: 200,
+            tweetCount: 500,
+            createdAt: new Date().toISOString(),
+            lastTweetAt: new Date().toISOString()
           },
           tweets: [
-            { id: '1', text: 'Hello world!', createdAt: new Date().toISOString() }
+            {
+              id: '1',
+              text: 'Hello world!',
+              createdAt: new Date().toISOString(),
+              user: {
+                screenName: 'testuser',
+                name: 'Test User',
+                profileImageUrl: 'https://example.com/profile.jpg',
+                description: 'Test account for X mention handling',
+                followersCount: 100,
+                friendsCount: 200,
+                location: 'Test Location'
+              },
+              images: [],
+              videos: [],
+              url: 'https://x.com/testuser/status/1'
+            }
           ],
-          mentionText: '@XAIAgentAI create token for my AI agent'
+          mentionText: '@XAIAgentAI create token for my AI agent',
+          tweetId: '1'
         },
         creatorAddress: '0x1234567890123456789012345678901234567890'
       };
@@ -131,20 +149,37 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
-            id: '123456',
             username: 'testuser',
-            displayName: 'Test User',
-            bio: 'Test account for X mention handling',
-            metrics: {
-              followers: 100,
-              following: 200,
-              tweets: 500
-            }
+            name: 'Test User',
+            description: 'Test account for X mention handling',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            followersCount: 100,
+            followingCount: 200,
+            tweetCount: 500,
+            createdAt: new Date().toISOString(),
+            lastTweetAt: new Date().toISOString()
           },
           tweets: [
-            { id: '1', text: 'Hello world!', createdAt: new Date().toISOString() }
+            {
+              id: '1',
+              text: 'Hello world!',
+              createdAt: new Date().toISOString(),
+              user: {
+                screenName: 'testuser',
+                name: 'Test User',
+                profileImageUrl: 'https://example.com/profile.jpg',
+                description: 'Test account for X mention handling',
+                followersCount: 100,
+                friendsCount: 200,
+                location: 'Test Location'
+              },
+              images: [],
+              videos: [],
+              url: 'https://x.com/testuser/status/1'
+            }
           ],
-          mentionText: '@XAIAgentAI 创建代币'
+          mentionText: '@XAIAgentAI 创建代币',
+          tweetId: '1'
         },
         creatorAddress: '0x1234567890123456789012345678901234567890'
       };
@@ -162,20 +197,37 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
-            id: '123456',
             username: 'testuser',
-            displayName: 'Test User',
-            bio: 'Test account for X mention handling',
-            metrics: {
-              followers: 100,
-              following: 200,
-              tweets: 500
-            }
+            name: 'Test User',
+            description: 'Test account for X mention handling',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            followersCount: 100,
+            followingCount: 200,
+            tweetCount: 500,
+            createdAt: new Date().toISOString(),
+            lastTweetAt: new Date().toISOString()
           },
           tweets: [
-            { id: '1', text: 'Hello world!', createdAt: new Date().toISOString() }
+            {
+              id: '1',
+              text: 'Hello world!',
+              createdAt: new Date().toISOString(),
+              user: {
+                screenName: 'testuser',
+                name: 'Test User',
+                profileImageUrl: 'https://example.com/profile.jpg',
+                description: 'Test account for X mention handling',
+                followersCount: 100,
+                friendsCount: 200,
+                location: 'Test Location'
+              },
+              images: [],
+              videos: [],
+              url: 'https://x.com/testuser/status/1'
+            }
           ],
-          mentionText: '@XAIAgentAI What is the meaning of life?'
+          mentionText: '@XAIAgentAI What is the meaning of life?',
+          tweetId: '1'
         },
         creatorAddress: '0x1234567890123456789012345678901234567890'
       };
@@ -192,20 +244,37 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
-            id: '123456',
             username: 'testuser',
-            displayName: 'Test User',
-            bio: 'Test account for X mention handling',
-            metrics: {
-              followers: 100,
-              following: 200,
-              tweets: 500
-            }
+            name: 'Test User',
+            description: 'Test account for X mention handling',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            followersCount: 100,
+            followingCount: 200,
+            tweetCount: 500,
+            createdAt: new Date().toISOString(),
+            lastTweetAt: new Date().toISOString()
           },
           tweets: [
-            { id: '1', text: 'Hello world!', createdAt: new Date().toISOString() }
+            {
+              id: '1',
+              text: 'Hello world!',
+              createdAt: new Date().toISOString(),
+              user: {
+                screenName: 'testuser',
+                name: 'Test User',
+                profileImageUrl: 'https://example.com/profile.jpg',
+                description: 'Test account for X mention handling',
+                followersCount: 100,
+                friendsCount: 200,
+                location: 'Test Location'
+              },
+              images: [],
+              videos: [],
+              url: 'https://x.com/testuser/status/1'
+            }
           ],
-          mentionText: '@XAIAgentAI Tell me a joke about programming'
+          mentionText: '@XAIAgentAI Tell me a joke about programming',
+          tweetId: '1'
         },
         creatorAddress: '0x1234567890123456789012345678901234567890'
       };

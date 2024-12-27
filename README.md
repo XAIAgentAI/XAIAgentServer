@@ -24,16 +24,16 @@ XAIAgent Server is a powerful AI agent platform that enables users to create per
 
 ### API Integrations
 - DecentralGPT API
-  - Endpoint: https://www.decentralgpt.org/doc/
-  - Model: Llama3-70B
-  - Proxy endpoint for enhanced reliability
+  - Model: Llama3.3
+  - Proxy endpoint for enhanced reliability and performance
+  - Bilingual support (English/Chinese) with context-aware responses
 - Twitter API v2 for tweet analysis
 - DBC blockchain integration
 
 ## Technical Details
 
 ### DecentralGPT Integration
-The system uses DecentralGPT's Llama3-70B model for:
+The system uses DecentralGPT's Llama3.3 model for:
 - Personality analysis
 - Response generation
 - Content organization
@@ -65,6 +65,8 @@ const defaultChineseTraits = {
 Required environment variables:
 ```
 DECENTRALGPT_API_KEY=your_api_key
+DECENTRALGPT_ENDPOINT=https://www.decentralgpt.org/api/v0/chat/completion/proxy
+DECENTRALGPT_MODEL=Llama3.3
 TWITTER_API_KEY=your_twitter_api_key
 DBC_RPC_URL=https://rpc-testnet.dbcwallet.io
 XAA_CONTRACT_ADDRESS=deployed_contract_address

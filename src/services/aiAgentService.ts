@@ -1,5 +1,4 @@
 import { 
-  XAccountData, 
   AIAgent, 
   PersonalityAnalysis, 
   TokenMetadata,
@@ -8,6 +7,7 @@ import {
   AnalysisResponse,
   SystemError
 } from '../types';
+import { XAccountData, Tweet } from '../types/twitter.js';
 // Allow dependency injection for testing
 import { userAnalyticsService as defaultUserAnalyticsService } from './userAnalyticsService';
 import { paymentService as defaultPaymentService } from './paymentService';
@@ -152,14 +152,15 @@ async function callDecentralGPT(prompt: string, context: string): Promise<string
 
 export async function createAIAgent(xAccountData: XAccountData): Promise<AIAgent> {
   try {
-    // Analyze personality using last 100 tweets
+    // Analyze personality using last 100 tweets with token limit
     const recentTweets = xAccountData.tweets.slice(-100);
-    const personality = await generatePersonalityAnalysis(recentTweets, xAccountData.profile);
+    const { tweets: processedTweets } = await processTweetsWithTokenLimit(recentTweets);
+    const personality = await generatePersonalityAnalysis(processedTweets, xAccountData.profile);
     
     const agent: AIAgent = {
       id: generateUniqueId(),
       xAccountId: xAccountData.id,
-      xHandle: xAccountData.profile?.username || xAccountData.id,
+      xHandle: xAccountData.profile.username || xAccountData.id,
       personality,
       createdAt: new Date().toISOString(),
       lastTrained: new Date().toISOString(),
@@ -328,7 +329,7 @@ async function generatePersonalityAnalysis(tweets: XAccountData['tweets'], profi
   const prompt = `Analyze the following tweets and user profile to create a detailed personality analysis. Include MBTI type, traits, interests, communication style, and professional aptitude. Format as JSON matching the PersonalityAnalysis interface.`;
   
   const context = JSON.stringify({
-    tweets: tweets.map(t => ({ text: t.text, createdAt: t.createdAt })),
+    tweets: tweets.map((tweet: Tweet) => ({ text: tweet.text, createdAt: tweet.createdAt })),
     profile
   });
 
@@ -608,6 +609,33 @@ export async function analyzeMatching(
       freeUsesLeft: lastAnalysisRecord.freeMatchingUsesLeft
     };
   }
+}
+
+async function validateTokenCount(tweet: Tweet): Promise<number> {
+  // Estimate tokens (rough approximation: 1 token ≈ 4 characters)
+  return Math.ceil(tweet.text.length / 4);
+}
+
+async function processTweetsWithTokenLimit(tweets: Tweet[]): Promise<{tweets: Tweet[], totalTokens: number}> {
+  let totalTokens = 0;
+  const processedTweets: Tweet[] = [];
+
+  for (const tweet of tweets) {
+    const tweetTokens = await validateTokenCount(tweet);
+    
+    // Check if adding this tweet would exceed 60k token limit
+    if (totalTokens + tweetTokens > 60000) {
+      break;
+    }
+
+    totalTokens += tweetTokens;
+    processedTweets.push(tweet);
+  }
+
+  return {
+    tweets: processedTweets,
+    totalTokens
+  };
 }
 
 export function generateUniqueId(): string {
