@@ -48,7 +48,14 @@ let _decentralGPTClient: DecentralGPTClient = {
     });
 
     if (!response.ok) {
-      throw new Error(`DecentralGPT API error: ${response.statusText}`);
+      const errorMessage = await response.text().catch(() => response.statusText);
+      if (response.status === 429) {
+        throw new Error('DecentralGPT API rate limit exceeded. Please try again later.');
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('DecentralGPT API authentication failed. Please check your API key.');
+      }
+      throw new Error(`DecentralGPT API error (${response.status}): ${errorMessage}`);
     }
 
     const data = await response.json() as {
@@ -128,9 +135,18 @@ export function mergePersonalities(original: PersonalityAnalysis, incoming: Pers
 async function callDecentralGPT(prompt: string, context: string): Promise<string> {
   try {
     return await _decentralGPTClient.call(prompt, context);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error calling DecentralGPT:', error);
-    throw error;
+    if (error.message.includes('rate limit')) {
+      throw new Error('API rate limit exceeded. Please try again in a few minutes.');
+    }
+    if (error.message.includes('authentication failed')) {
+      throw new Error('API authentication error. Please check your configuration.');
+    }
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      throw new Error('Network error: Unable to connect to DecentralGPT API. Please check your internet connection.');
+    }
+    throw new Error(`DecentralGPT API error: ${error.message}`);
   }
 }
 
@@ -167,9 +183,12 @@ export async function createAIAgent(xAccountData: XAccountData): Promise<AIAgent
     };
     
     return agent;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating AI agent:', error);
-    throw error;
+    if (error.message.includes('DecentralGPT API')) {
+      throw error; // Preserve API-specific errors
+    }
+    throw new Error(`Failed to create AI agent: ${error.message}`);
   }
 }
 

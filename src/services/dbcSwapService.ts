@@ -35,9 +35,18 @@ export class DBCSwapService {
         poolAddress: '0x0000000000000000000000000000000000000000', // Placeholder
         initialTokenAmount
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating DBCSwap pool:', error);
-      throw error;
+      if (error.message.includes('insufficient liquidity')) {
+        throw new Error('Failed to create pool: Insufficient liquidity');
+      }
+      if (error.message.includes('pool already exists')) {
+        throw new Error('Pool already exists for this token');
+      }
+      if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+        throw new Error('Failed to create pool: Gas estimation failed');
+      }
+      throw new Error(`Failed to create DBCSwap pool: ${error.message}`);
     }
   }
 }

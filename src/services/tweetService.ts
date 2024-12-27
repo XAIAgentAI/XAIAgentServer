@@ -71,9 +71,18 @@ export class TweetService {
       });
 
       return this.processTweets(response.data.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error fetching tweets for user ${userHandle}:`, error);
-      throw error;
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        throw new Error('Twitter API rate limit exceeded. Please try again later.');
+      }
+      if (error.code === 'ENOTFOUND') {
+        throw new Error('Network error: Unable to connect to Twitter API');
+      }
+      if (error.code === 'UNAUTHORIZED') {
+        throw new Error('Twitter API authentication failed. Please check your credentials.');
+      }
+      throw new Error(`Failed to fetch tweets: ${error.message}`);
     }
   }
 
