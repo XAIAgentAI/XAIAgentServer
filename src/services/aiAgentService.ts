@@ -57,7 +57,8 @@ let _decentralGPTClient: DecentralGPTClient = {
       throw new Error(`DecentralGPT API error (${response.status}): ${errorMessage}`);
     }
 
-    const data = await response.json() as {
+    const responseData = await response.json();
+    const data = responseData as {
       code: number;
       message: string;
       data: {
@@ -98,7 +99,7 @@ export function injectDependencies(deps: {
   if (deps.decentralGPTClient) _decentralGPTClient = deps.decentralGPTClient;
 }
 
-const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://korea-chat.degpt.ai/api/v0/chat/completion/proxy';
+const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://singapore-chat.degpt.ai/api/v0/chat/completion/proxy';
 const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
 const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'Llama3.3-70B';
 
