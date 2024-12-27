@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "XAIAgent Server for AI agent and token creation",
   "type": "module",
+  "imports": {
+    "#lodash": "lodash",
+    "#dayjs": "dayjs"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

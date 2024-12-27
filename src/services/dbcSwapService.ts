@@ -1,13 +1,13 @@
-import { ethers, providers, Contract } from 'ethers';
+import { ethers, Contract, JsonRpcProvider } from 'ethers';
 import { DRC20_ABI } from '../constants/abis';
 import { DBCSwapPool } from '../types/index';
 
 export class DBCSwapService {
-  private provider: providers.JsonRpcProvider;
+  private provider: JsonRpcProvider;
   private xaaTokenAddress: string;
   
   constructor() {
-    this.provider = new providers.JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
+    this.provider = new JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
     this.xaaTokenAddress = process.env.XAA_CONTRACT_ADDRESS || '';
   }
 

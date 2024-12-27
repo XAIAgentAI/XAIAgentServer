@@ -1,9 +1,7 @@
-import { ethers, providers, utils, Contract, Wallet, ContractFactory } from 'ethers';
+import { ethers, Contract, JsonRpcProvider, Wallet, ContractFactory, parseUnits, formatUnits } from 'ethers';
 import { XAccountData, TokenMetadata, Token } from '../types/index';
 import { DBCSwapService } from './dbcSwapService';
 import { DRC20_ABI } from '../constants/abis';
-
-const { parseUnits, formatUnits } = utils;
 
 const TOTAL_SUPPLY = parseUnits('100000000000', 18); // 100 billion tokens
 const TARGET_FDV_USD = 100_000; // $100k USD initial FDV
@@ -28,7 +26,7 @@ export async function createToken(xAccountData: XAccountData, creatorAddress: st
     const pool = await dbcSwapService.createPool(token.address, initialTokenAmount);
     
     // Transfer 10% to creator's wallet
-    const creatorAmount = TOTAL_SUPPLY.mul(10).div(100);
+    const creatorAmount = (TOTAL_SUPPLY * BigInt(10)) / BigInt(100);
     await transferTokens(token.address, creatorAddress, creatorAmount.toString());
     
     // Renounce ownership
@@ -62,19 +60,19 @@ async function deployTokenContract(metadata: TokenMetadata, creatorAddress: stri
     throw new Error('DBC_PRIVATE_KEY environment variable is required');
   }
 
-  const provider = new providers.JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
+  const provider = new JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
   const signer = new Wallet(process.env.DBC_PRIVATE_KEY, provider);
   
   // Deploy token contract with manual gas settings and nonce management
   const factory = new ContractFactory(DRC20_ABI, process.env.DRC20_BYTECODE || '', signer);
   
   // Get current nonce
-  const nonce = await signer.getTransactionCount();
+  const nonce = await provider.getTransactionCount(signer.address);
   
   // Set deployment options with nonce
   const deploymentOptions = {
     gasLimit: 3000000,  // Manual gas limit
-    gasPrice: utils.parseUnits('1', 'gwei'),  // 1 Gwei gas price
+    gasPrice: parseUnits('1', 'gwei'),  // 1 Gwei gas price
     nonce: nonce
   };
 
@@ -88,10 +86,16 @@ async function deployTokenContract(metadata: TokenMetadata, creatorAddress: stri
       const currentOptions = { ...deploymentOptions, nonce: currentNonce };
       
       const contract = await factory.deploy(currentOptions);
-      await contract.deployed();
+      await contract.waitForDeployment();
       
       // Initialize token after deployment with incremented nonce
-      await contract.initialize(
+      const contractWithSigner = contract.connect(signer);
+      // Call initialize function using contract interface
+      const initializeFn = contractWithSigner.getFunction('initialize');
+      if (!initializeFn) {
+        throw new Error('Initialize function not found in contract ABI');
+      }
+      await initializeFn(
         metadata.name,
         metadata.symbol,
         TOTAL_SUPPLY,
@@ -103,7 +107,7 @@ async function deployTokenContract(metadata: TokenMetadata, creatorAddress: stri
       );
 
       return {
-        address: contract.address,
+        address: await contract.getAddress(),
         name: metadata.name,
         symbol: metadata.symbol,
         creatorAddress,
@@ -125,7 +129,7 @@ async function transferTokens(tokenAddress: string, to: string, amount: string):
   if (!process.env.DBC_PRIVATE_KEY) {
     throw new Error('DBC_PRIVATE_KEY environment variable is required');
   }
-  const provider = new providers.JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
+  const provider = new JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
   const signer = new Wallet(process.env.DBC_PRIVATE_KEY, provider);
   const tokenContract = new Contract(tokenAddress, DRC20_ABI, signer);
   
@@ -136,7 +140,7 @@ async function renounceOwnership(tokenAddress: string): Promise<void> {
   if (!process.env.DBC_PRIVATE_KEY) {
     throw new Error('DBC_PRIVATE_KEY environment variable is required');
   }
-  const provider = new providers.JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
+  const provider = new JsonRpcProvider(process.env.DBC_RPC_URL || 'https://rpc.dbcwallet.io');
   const signer = new Wallet(process.env.DBC_PRIVATE_KEY, provider);
   const tokenContract = new Contract(tokenAddress, DRC20_ABI, signer);
   

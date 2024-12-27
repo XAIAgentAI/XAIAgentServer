@@ -173,7 +173,7 @@ describe('AI Agent Personality Tests', () => {
     });
   });
 
-  describe('Token Limit Enforcement', () => {
+  describe('Token Limit Enforcement', () => { // Using TweetService's test helper
     it('should enforce 60k token limit when analyzing tweets', async () => {
       const tweetService = new TweetService();
       

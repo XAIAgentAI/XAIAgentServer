@@ -24,7 +24,7 @@ let _paymentService = defaultPaymentService;
 let _analysisCacheService = defaultAnalysisCacheService;
 let _decentralGPTClient: DecentralGPTClient = {
   async call(prompt: string, context: string): Promise<string> {
-    const response = await fetch(DECENTRALGPT_ENDPOINT, {
+    const response = await fetch(DECENTRALGPT_ENDPOINT.replace('/chat/completion', '/chat/completion/proxy'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,13 +52,30 @@ let _decentralGPTClient: DecentralGPTClient = {
     }
 
     const data = await response.json() as {
-      choices: Array<{
-        message: {
-          content: string;
+      code: number;
+      message: string;
+      data: {
+        created: number;
+        choices: Array<{
+          index: number;
+          message: {
+            role: string;
+            content: string;
+          };
+          finish_reason: string;
+        }>;
+        usage: {
+          completion_tokens: number;
+          prompt_tokens: number;
+          total_tokens: number;
         };
-      }>;
+      };
     };
-    return data.choices[0].message.content;
+
+    if (data.code !== 0) {
+      throw new Error(`DecentralGPT API error: ${data.message}`);
+    }
+    return data.data.choices[0].message.content;
   }
 };
 

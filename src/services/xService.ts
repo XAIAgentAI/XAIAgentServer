@@ -1,6 +1,7 @@
 import { createAIAgent, answerQuestion } from './aiAgentService.js';
 import { createToken } from './tokenService.js';
 import { XAccountData, AIAgent, Token, MentionType, APIResponse } from '../types/index.js';
+// Mock Twitter functionality temporarily disabled
 
 function detectMentionType(mentionText: string): MentionType {
   const tokenCreationKeywords = [

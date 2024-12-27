@@ -1,8 +1,6 @@
-import { ethers } from 'ethers';
+import { ethers, parseUnits, Contract, JsonRpcProvider } from 'ethers';
 import { UserAnalytics } from '../types';
 import { userAnalyticsService } from './userAnalyticsService';
-
-const { parseUnits } = ethers.utils;
 
 export const paymentService = {
   checkXAABalance,
@@ -10,8 +8,6 @@ export const paymentService = {
   getXAAApprovalStatus,
   validateAndProcessPayment
 };
-const { JsonRpcProvider } = ethers.providers;
-const { Contract } = ethers;
 
 // XAA token contract ABI (minimal interface for balance and transfer)
 const XAA_ABI = [
@@ -32,7 +28,7 @@ dotenv.config();
 // Environment configuration
 const XAA_CONTRACT_ADDRESS = process.env.XAA_CONTRACT_ADDRESS as string;
 const PLATFORM_WALLET_ADDRESS = process.env.PLATFORM_WALLET_ADDRESS as string;
-const MATCHING_ANALYSIS_COST = parseUnits(process.env.MATCHING_ANALYSIS_COST || '10', 18);
+const MATCHING_ANALYSIS_COST = process.env.MATCHING_ANALYSIS_COST ? parseUnits(process.env.MATCHING_ANALYSIS_COST, 18) : parseUnits('10', 18);
 
 // Validate configuration
 if (!XAA_CONTRACT_ADDRESS || !PLATFORM_WALLET_ADDRESS) {
@@ -96,7 +92,9 @@ async function checkXAABalance(userAddress: string): Promise<{
     console.error('Error checking XAA balance:', error);
     return {
       success: false,
-      error: 'CONTRACT_ERROR'
+      error: error instanceof Error && error.message.includes('network') 
+        ? 'NETWORK_ERROR'
+        : 'CONTRACT_ERROR'
     };
   }
 }
@@ -117,7 +115,7 @@ async function processXAAPayment(userAddress: string): Promise<{
       await xaaContract.allowance(userAddress, PLATFORM_WALLET_ADDRESS)
     );
     
-    if (BigInt(allowance.toString()) < BigInt(MATCHING_ANALYSIS_COST.toString())) {
+    if (allowance < MATCHING_ANALYSIS_COST) {
       return {
         success: false,
         error: 'INSUFFICIENT_ALLOWANCE'
@@ -166,7 +164,7 @@ async function getXAAApprovalStatus(userAddress: string): Promise<{
       await xaaContract.allowance(userAddress, PLATFORM_WALLET_ADDRESS)
     );
     
-    if (BigInt(allowance.toString()) >= BigInt(MATCHING_ANALYSIS_COST.toString())) {
+    if (allowance >= MATCHING_ANALYSIS_COST) {
       return { 
         success: true,
         approved: true 
