@@ -25,11 +25,11 @@ interface AnalysisCache {
   expiresAt: Date;  // Internal field for cache management
 }
 
-import IORedis from 'ioredis';
-const Redis = IORedis;
+import Redis from 'ioredis';
+import type { Redis as RedisType } from 'ioredis';
 
 // Redis client interface
-type RedisClient = IORedis;
+type RedisClient = RedisType;
 
 // Redis configuration
 interface RedisConfig {
@@ -194,12 +194,12 @@ const mockRedisClient = {
     }
     return -1;
   },
-  on: function(event: string | symbol, listener: (...args: any[]) => void) {
+  on(event: string | symbol, listener: (...args: any[]) => void): any {
     if (event === 'error' && listener) {
       listener();
     }
-    return this;
-  } as any
+    return mockRedisClient;
+  }
 };
 
 // Initialize Redis client
@@ -217,8 +217,7 @@ async function initRedis() {
         port: redisConfig.port,
         db: redisConfig.db
       });
-      const client = new Redis();
-      await client.connect();
+      const client = new Redis(redisConfig);
       await client.select(redisConfig.db);
       redisClient = client as unknown as RedisClient;
     }
