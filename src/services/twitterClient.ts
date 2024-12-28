@@ -1,4 +1,4 @@
-import { TwitterApi } from 'twitter-api-v2';
+import { TwitterApi, TweetV2, TwitterApiv2 } from 'twitter-api-v2';
 
 class TwitterClient {
   private static instance: TwitterApi;
@@ -76,6 +76,57 @@ class TwitterClient {
     } catch (error) {
       console.error('Error posting Twitter response:', error);
       throw new Error('Failed to post response to Twitter');
+    }
+  }
+
+  public static async waitForReply(tweetId: string, timeout: number): Promise<TweetV2 | null> {
+    const client = await TwitterClient.getInstance();
+    const startTime = Date.now();
+
+    try {
+      if (TwitterClient.mockMode) {
+        // Mock implementation for testing
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return {
+          id: 'mock-reply-id',
+          text: 'yes',
+          author_id: 'mock-author-id',
+          created_at: new Date().toISOString()
+        } as TweetV2;
+      }
+
+      while (Date.now() - startTime < timeout) {
+        // Search for replies to the tweet
+        const replies = await client.v2.search(`conversation_id:${tweetId}`, {
+          expansions: ['referenced_tweets.id', 'author_id', 'in_reply_to_user_id'],
+          'tweet.fields': ['author_id', 'in_reply_to_user_id', 'referenced_tweets', 'conversation_id']
+        });
+        
+        // Check each tweet in the response
+        for (const tweet of replies.tweets) {
+          const referencedTweet = tweet.referenced_tweets?.[0];
+          if (referencedTweet?.type === 'replied_to' && 
+              referencedTweet.id === tweetId &&
+              tweet.author_id === tweet.in_reply_to_user_id) {
+            return tweet;
+          }
+        }
+
+        // If no valid reply found in this batch, check if there are more results
+        if (!replies.meta.next_token) {
+          // No more results, wait before next search
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
+
+        // Wait 10 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+
+      // Timeout reached
+      return null;
+    } catch (error) {
+      console.error('Error waiting for Twitter reply:', error);
+      throw new Error('Failed to fetch Twitter replies');
     }
   }
 }

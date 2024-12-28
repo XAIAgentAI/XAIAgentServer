@@ -1,5 +1,5 @@
 import { ethers, parseUnits, Contract, JsonRpcProvider } from 'ethers';
-import { UserAnalytics } from '../types/index.js';
+import { UserAnalytics, PaymentValidationRequest } from '../types/index.js';
 import { userAnalyticsService } from './userAnalyticsService.js';
 
 export const paymentService = {
@@ -200,8 +200,7 @@ async function getXAAApprovalStatus(userAddress: string): Promise<{
  * @returns Object containing payment status and any error messages
  */
 async function validateAndProcessPayment(
-  userAddress: string,
-  analytics: UserAnalytics
+  request: PaymentValidationRequest
 ): Promise<{
   success: boolean;
   error?: PaymentError;
@@ -213,11 +212,15 @@ async function validateAndProcessPayment(
   transactionHash?: string;
 }> {
   try {
-    // userAddress is already passed in directly
+    // Get cost based on request type
+    const cost = request.type === 'matching' ? MATCHING_ANALYSIS_COST :
+                request.type === 'personality' ? parseUnits('50', 18) :
+                request.type === 'token' ? parseUnits('500', 18) :
+                parseUnits(request.amount.toString(), 18);
     
     // Check XAA balance
-    const balanceCheck = await checkXAABalance(userAddress);
-    if (!balanceCheck.success || !balanceCheck.balance || BigInt(balanceCheck.balance.toString()) < BigInt(MATCHING_ANALYSIS_COST.toString())) {
+    const balanceCheck = await checkXAABalance(request.userId);
+    if (!balanceCheck.success || !balanceCheck.balance || BigInt(balanceCheck.balance.toString()) < BigInt(cost.toString())) {
       return {
         success: false,
         error: balanceCheck.error || 'INSUFFICIENT_BALANCE'
@@ -225,7 +228,7 @@ async function validateAndProcessPayment(
     }
 
     // Check approval status
-    const approvalStatus = await getXAAApprovalStatus(userAddress);
+    const approvalStatus = await getXAAApprovalStatus(request.userId);
     if (!approvalStatus.success) {
       return {
         success: false,
@@ -243,7 +246,7 @@ async function validateAndProcessPayment(
     }
 
     // Process payment
-    const paymentResult = await processXAAPayment(userAddress);
+    const paymentResult = await processXAAPayment(request.userId);
     if (!paymentResult.success) {
       return {
         success: false,

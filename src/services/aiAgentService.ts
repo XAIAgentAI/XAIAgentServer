@@ -14,6 +14,44 @@ import { paymentService as defaultPaymentService } from './paymentService.js';
 import { analysisCacheService as defaultAnalysisCacheService } from './analysisCacheService.js';
 import fetch from 'node-fetch';
 
+// Interface for DecentralGPT API response
+interface DecentralGPTModelsResponse {
+  models: string[];
+  status?: string;
+  message?: string;
+}
+
+// Function to fetch available models from DecentralGPT API
+export async function fetchAvailableModels(): Promise<string[]> {
+  try {
+    const response = await fetch('https://singapore-chat.degpt.ai/api/v0/ai/projects/models', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorMessage = await response.text().catch(() => response.statusText);
+      throw new Error(`Failed to fetch available models: ${response.status} - ${errorMessage}`);
+    }
+
+    const data = await response.json() as DecentralGPTModelsResponse;
+    
+    if (!data || !Array.isArray(data.models)) {
+      throw new Error('Invalid response format from DecentralGPT API: models array not found');
+    }
+
+    return data.models;
+  } catch (error: any) {
+    console.error('Error fetching available models:', error);
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      throw new Error('Network error: Unable to connect to DecentralGPT API');
+    }
+    throw error;
+  }
+}
+
 // Define DecentralGPT client interface
 interface DecentralGPTClient {
   call(prompt: string, context: string): Promise<string>;
@@ -24,13 +62,22 @@ let _paymentService = defaultPaymentService;
 let _analysisCacheService = defaultAnalysisCacheService;
 let _decentralGPTClient: DecentralGPTClient = {
   async call(prompt: string, context: string): Promise<string> {
+    // Verify model availability before making the request
+    const availableModels = await fetchAvailableModels();
+    let selectedModel = DECENTRALGPT_MODEL;
+    
+    if (!availableModels.includes(selectedModel)) {
+      console.warn(`Model ${selectedModel} not found in DecentralGPT cluster. Falling back to ${availableModels[0]}`);
+      selectedModel = availableModels[0];
+    }
+
     const response = await fetch(DECENTRALGPT_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: DECENTRALGPT_MODEL,
+        model: selectedModel,
         messages: [
           {
             role: 'system',

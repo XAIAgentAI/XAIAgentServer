@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ParamsDictionary } from 'express-serve-static-core';
 import { storeTrainingData, updateAgentPersonality } from '../services/aiAgentService.js';
 import { validateTrainingData, validatePersonalityUpdate, verifyAgentOwnership } from '../utils/validation.js';
-import { TrainingDataRequest, PersonalityUpdateRequest, AuthenticatedRequest } from '../types/index.js';
+import { TrainingDataRequest, PersonalityUpdateRequest, AuthenticatedRequest, PersonalityAnalysis } from '../types/index.js';
 
 export const router = Router();
 
@@ -71,7 +71,36 @@ router.post('/personality/:agentId', async (req: AuthenticatedRequest & { body: 
     }
 
     // Update personality
-    const updatedAgent = await updateAgentPersonality(agentId, description);
+    const personality: PersonalityAnalysis = {
+      description,
+      mbti: '',
+      traits: [],
+      interests: [],
+      values: [],
+      communicationStyle: {
+        primary: '',
+        strengths: [],
+        weaknesses: [],
+        languages: []
+      },
+      professionalAptitude: {
+        industries: [],
+        skills: [],
+        workStyle: ''
+      },
+      socialInteraction: {
+        style: '',
+        preferences: [],
+        challenges: []
+      },
+      contentCreation: {
+        topics: [],
+        style: '',
+        engagement_patterns: []
+      },
+      lastUpdated: new Date().toISOString()
+    };
+    const updatedAgent = await updateAgentPersonality(agentId, personality);
 
     res.status(200).json({
       success: true,

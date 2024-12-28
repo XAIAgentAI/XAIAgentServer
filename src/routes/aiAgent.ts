@@ -75,7 +75,7 @@ router.post('/analyze/personal', async (req: express.Request, res: express.Respo
     
     const response: APIResponse<PersonalAnalysisResult> = {
       success: result.success,
-      data: result.data,
+      data: result.data as PersonalAnalysisResult,
       error: result.error,
       timestamp: new Date().toISOString()
     };
@@ -163,31 +163,36 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
 
     // Create response with matching analysis result
     const matchingResult: MatchingAnalysisResult = result.data ? {
-      ...result.data,
-      transactionHash: paymentResult.transactionHash,
+      compatibility: (result.data as MatchingAnalysisResult).compatibility || 0,
       commonInterests: (result.data as MatchingAnalysisResult).commonInterests || [],
+      potentialSynergies: (result.data as MatchingAnalysisResult).potentialSynergies || [],
+      challenges: (result.data as MatchingAnalysisResult).challenges || [],
+      recommendations: (result.data as MatchingAnalysisResult).recommendations || [],
       compatibilityDetails: (result.data as MatchingAnalysisResult).compatibilityDetails || {
         values: 0,
         communication: 0,
         interests: 0
       },
-      personalityTraits: result.data.personalityTraits || {},
-      interests: result.data.interests || [],
-      writingStyle: result.data.writingStyle || {},
-      topicPreferences: result.data.topicPreferences || [],
-      matchScore: (result.data as MatchingAnalysisResult).matchScore || 0
+      personalityTraits: (result.data as MatchingAnalysisResult).personalityTraits || {},
+      writingStyle: (result.data as MatchingAnalysisResult).writingStyle || {},
+      topicPreferences: (result.data as MatchingAnalysisResult).topicPreferences || [],
+      matchScore: (result.data as MatchingAnalysisResult).matchScore || 0,
+      transactionHash: paymentResult.transactionHash
     } : {
-      personalityTraits: {},
-      interests: [],
-      writingStyle: {},
-      topicPreferences: [],
-      matchScore: 0,
+      compatibility: 0,
       commonInterests: [],
+      potentialSynergies: [],
+      challenges: [],
+      recommendations: [],
       compatibilityDetails: {
         values: 0,
         communication: 0,
         interests: 0
       },
+      personalityTraits: {},
+      writingStyle: {},
+      topicPreferences: [],
+      matchScore: 0,
       transactionHash: paymentResult.transactionHash
     };
 
@@ -239,7 +244,16 @@ router.post('/:agentId/token/name', async (req, res) => {
     // TODO: Get agent from database
     const agent = await getAgentFromDb(agentId);
     
-    const tokenMetadata = await generateTokenName(agent);
+    const xAccountData: XAccountData = {
+      id: agent.xAccountId || '',
+      profile: {
+        username: agent.xHandle,
+        name: agent.xHandle,
+        description: agent.personality?.description || ''
+      },
+      tweets: []
+    };
+    const tokenMetadata = await generateTokenName(xAccountData);
     
     const response: APIResponse<typeof tokenMetadata> = {
       success: true,

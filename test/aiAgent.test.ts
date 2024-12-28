@@ -136,11 +136,29 @@ describe('AI Agent Analysis Tests', () => {
         return Promise.resolve(JSON.stringify({
           matchScore: 0.85,
           commonInterests: ['tech', 'AI'],
-          compatibility: {
+          compatibility: 0.85,
+          potentialSynergies: ['collaborative development', 'knowledge sharing'],
+          challenges: ['communication style differences'],
+          recommendations: ['focus on shared interests', 'leverage complementary skills'],
+          compatibilityDetails: {
             values: 0.8,
             communication: 0.7,
             interests: 0.9
-          }
+          },
+          personalityTraits: {
+            openness: 0.8,
+            conscientiousness: 0.7,
+            extraversion: 0.6,
+            agreeableness: 0.7,
+            neuroticism: 0.4
+          },
+          writingStyle: {
+            formal: 0.6,
+            technical: 0.7,
+            friendly: 0.8,
+            emotional: 0.4
+          },
+          topicPreferences: ['AI', 'technology']
         }));
       }
       return Promise.resolve('{}');
@@ -330,24 +348,26 @@ describe('AI Agent Analysis Tests', () => {
       });
 
       const mockMatchingData = {
-        personalityTraits: { openness: 0.8 },
-        interests: ['tech'],
-        writingStyle: { formal: 0.6 },
-        topicPreferences: ['AI'],
-        matchScore: 0.85,
+        compatibility: 0.85,
         commonInterests: ['tech'],
-        compatibilityDetails: {
-          values: 0.8,
-          communication: 0.7,
-          interests: 0.9
-        }
+        challenges: ['communication style differences'],
+        opportunities: ['leverage complementary skills'],
+        writingStyle: {
+          formal: 0.7,
+          technical: 0.6,
+          friendly: 0.8,
+          emotional: 0.4
+        },
+        topicPreferences: ['AI', 'Technology']
       };
 
       const mockMatchingResult = {
         success: true,
         paymentRequired: false,
         freeUsesLeft: 4,
-        data: mockMatchingData
+        data: mockMatchingData,
+        cached: false,
+        hits: 1
       };
 
       getOrCreateUserAnalyticsStub.resolves(mockAnalytics);
@@ -383,35 +403,26 @@ describe('AI Agent Analysis Tests', () => {
       };
 
       const mockMatchingData = {
-        personalityTraits: {
-          openness: 0.8,
-          conscientiousness: 0.7,
-          extraversion: 0.6,
-          agreeableness: 0.7,
-          neuroticism: 0.4
-        },
-        interests: ['AI', 'technology'],
+        compatibility: 0.85,
+        commonInterests: ['tech'],
+        challenges: ['communication style differences'],
+        opportunities: ['leverage complementary skills'],
         writingStyle: {
           formal: 0.7,
           technical: 0.6,
           friendly: 0.8,
           emotional: 0.4
         },
-        topicPreferences: ['AI', 'Technology'],
-        matchScore: 0.85,
-        commonInterests: ['AI', 'tech'],
-        compatibilityDetails: {
-          values: 0.8,
-          communication: 0.7,
-          interests: 0.9
-        }
+        topicPreferences: ['AI', 'Technology']
       };
 
       const mockMatchingResult = {
         success: true,
         paymentRequired: true,
         freeUsesLeft: 0,
-        data: mockMatchingData
+        data: mockMatchingData,
+        cached: false,
+        hits: 1
       };
 
       getOrCreateUserAnalyticsStub.resolves(mockAnalytics);
@@ -457,4 +468,88 @@ describe('AI Agent Analysis Tests', () => {
     });
   });
 
+  describe('DecentralGPT Model Verification', () => {
+    // Create a mock X account data for testing
+    const testXAccountData: XAccountData = {
+      id: 'test123',
+      profile: {
+        username: 'testuser',
+        name: 'Test User',
+        description: 'Test bio',
+        profileImageUrl: 'https://example.com/profile.jpg',
+        followersCount: 100,
+        followingCount: 50,
+        tweetCount: 200,
+        createdAt: '2024-02-25T00:00:00Z',
+        lastTweetAt: '2024-02-25T00:00:00Z'
+      },
+      tweets: [
+        {
+          id: 'tweet1',
+          text: 'Test tweet 1',
+          createdAt: '2024-02-25T00:00:00Z',
+          user: {
+            screenName: 'testuser',
+            name: 'Test User',
+            profileImageUrl: 'https://example.com/profile.jpg',
+            description: 'Test bio',
+            followersCount: 100,
+            friendsCount: 50,
+            location: 'Test Location'
+          },
+          images: [],
+          videos: [],
+          url: 'https://x.com/testuser/status/tweet1'
+        }
+      ]
+    };
+
+    it('should verify model availability before making API calls', async () => {
+      const mockModels = ['Llama3.3-70B', 'GPT-4'];
+      const fetchModelsStub = sandbox.stub(aiAgentServiceModule, 'fetchAvailableModels');
+      fetchModelsStub.resolves(mockModels);
+      
+      // Inject the DecentralGPT client stub
+      aiAgentServiceModule.injectDependencies({
+        decentralGPTClient: {
+          call: async (prompt: string, context: string) => {
+            return JSON.stringify({
+              traits: { openness: 0.8 },
+              interests: ['AI'],
+              style: { formal: 0.7 }
+            });
+          }
+        }
+      });
+
+      const result = await aiAgentServiceModule.analyzePersonality(testXAccountData);
+      expect(result).to.not.be.null;
+      expect(result.success).to.be.true;
+      expect(fetchModelsStub.calledOnce).to.be.true;
+    });
+
+    it('should fall back to available model if preferred model is not available', async () => {
+      const mockModels = ['GPT-4'];  // Llama3.3-70B not available
+      const fetchModelsStub = sandbox.stub(aiAgentServiceModule, 'fetchAvailableModels');
+      fetchModelsStub.resolves(mockModels);
+      
+      // Inject the DecentralGPT client stub
+      aiAgentServiceModule.injectDependencies({
+        decentralGPTClient: {
+          call: async (prompt: string, context: string) => {
+            return JSON.stringify({
+              traits: { openness: 0.8 },
+              interests: ['AI'],
+              style: { formal: 0.7 }
+            });
+          }
+        }
+      });
+
+      const result = await aiAgentServiceModule.analyzePersonality(testXAccountData);
+      expect(result).to.not.be.null;
+      expect(result.success).to.be.true;
+      expect(fetchModelsStub.calledOnce).to.be.true;
+    });
+  });
 });

@@ -26,8 +26,16 @@ const questionLimiter = rateLimit({
 const mentionTypeLimiter = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { accountData } = req.body;
-    if (!accountData?.mentionText || !accountData?.profile?.username) {
-      return res.status(400).json({ error: 'Invalid mention data' });
+    
+    // Check for required fields
+    if (!accountData?.profile?.username) {
+      return res.status(400).json({ error: 'Invalid mention data: missing username' });
+    }
+
+    // Handle empty mentions (use question rate limit)
+    if (!accountData?.mentionText?.trim()) {
+      console.log('Empty mention detected, using question rate limit');
+      return questionLimiter(req, res, next);
     }
 
     const mentionText = accountData.mentionText.toLowerCase();
@@ -40,6 +48,7 @@ const mentionTypeLimiter = async (req: express.Request, res: express.Response, n
                            mentionText.includes('create virtual') ||
                            mentionText.includes('创建虚拟人');
 
+    console.log('Mention type:', isTokenCreation ? 'token creation' : 'question');
     return isTokenCreation ? tokenCreationLimiter(req, res, next) : questionLimiter(req, res, next);
   } catch (error) {
     console.error('Error in mention type limiter:', error);
