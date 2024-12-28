@@ -26,7 +26,9 @@ interface AnalysisCache {
 }
 
 import Redis from 'ioredis';
-import type { Redis as RedisType } from 'ioredis';
+
+// Define Redis client type as the instance type of Redis
+type RedisType = InstanceType<typeof Redis>;
 
 // Redis client interface
 type RedisClient = RedisType;
@@ -217,7 +219,14 @@ async function initRedis() {
         port: redisConfig.port,
         db: redisConfig.db
       });
-      const client = new Redis(redisConfig);
+      const client = new Redis({
+        host: redisConfig.host,
+        port: redisConfig.port,
+        password: redisConfig.password,
+        db: redisConfig.db,
+        retryStrategy: redisConfig.retryStrategy,
+        maxRetriesPerRequest: redisConfig.maxRetriesPerRequest
+      });
       await client.select(redisConfig.db);
       redisClient = client as unknown as RedisClient;
     }

@@ -18,7 +18,9 @@ import {
 import { XAccountData } from '../types/twitter.js';
 import { tweetService } from './tweetService.js';
 import Redis from 'ioredis';
-import type { Redis as RedisType } from 'ioredis';
+
+// Define Redis client type as the instance type of Redis
+type RedisType = InstanceType<typeof Redis>;
 
 // Redis configuration
 interface RedisConfig {
@@ -128,7 +130,14 @@ async function initRedis() {
   if (process.env.NODE_ENV === 'test') {
     redisClient = mockRedisClient;
   } else {
-    const client = new Redis(redisConfig);
+    const client = new Redis({
+      host: redisConfig.host,
+      port: redisConfig.port,
+      password: redisConfig.password,
+      db: redisConfig.db,
+      retryStrategy: redisConfig.retryStrategy,
+      maxRetriesPerRequest: redisConfig.maxRetriesPerRequest
+    });
     await client.select(parseInt(process.env.REDIS_DB || '0'));
     redisClient = client;
   }
