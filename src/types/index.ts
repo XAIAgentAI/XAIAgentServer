@@ -286,8 +286,16 @@ export interface PersonalAnalysisResult {
 export interface MatchingAnalysisResult {
   compatibility: number;
   commonInterests: string[];
+  potentialSynergies: any[];
   challenges: string[];
   opportunities: string[];
+  recommendations: any[];
+  compatibilityDetails: {
+    values: number;
+    communication: number;
+    interests: number;
+  };
+  personalityTraits: Record<string, any>;
   writingStyle: {
     formal: number;
     technical: number;
@@ -295,6 +303,12 @@ export interface MatchingAnalysisResult {
     emotional: number;
   };
   topicPreferences: string[];
+  matchScore: number;
+  transactionHash?: string;
+  hits?: number;
+  cached?: boolean;
+  freeUsesLeft?: number;
+  paymentRequired?: boolean;
 }
 
 export interface TokenMetadata {

@@ -17,7 +17,8 @@ import {
 } from '../types/index.js';
 import { XAccountData } from '../types/twitter.js';
 import { tweetService } from './tweetService.js';
-import Redis from 'ioredis';
+import IORedis from 'ioredis';
+const Redis = IORedis;
 
 // Initialize Redis client
 interface MockRedisClient {
@@ -101,12 +102,23 @@ const mockRedisClient: MockRedisClient = {
   }
 };
 
-const redisClient = process.env.NODE_ENV === 'test' ? mockRedisClient : new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  db: parseInt(process.env.REDIS_DB || '0')
-});
+// Initialize Redis client
+let redisClient: any;
+
+async function initRedis() {
+  if (process.env.NODE_ENV === 'test') {
+    redisClient = mockRedisClient;
+  } else {
+    const client = new Redis();
+    await client.connect();
+    await client.select(parseInt(process.env.REDIS_DB || '0'));
+    redisClient = client;
+  }
+}
+
+// Initialize Redis when module loads
+initRedis().catch(console.error);
+
 
 // Using AIService interface from types/index.ts
 import TwitterClient from './twitterClient.js';
@@ -135,15 +147,27 @@ const defaultAIService: AIService = {
     data: {
       compatibility: 0.85,
       commonInterests: ['tech', 'AI'],
+      potentialSynergies: ['Technical collaboration', 'Knowledge sharing'],
       challenges: ['communication style differences'],
       opportunities: ['collaborative development', 'knowledge sharing'],
+      recommendations: ['Schedule regular sync-ups', 'Focus on shared interests'],
+      compatibilityDetails: {
+        values: 0.8,
+        communication: 0.7,
+        interests: 0.9
+      },
+      personalityTraits: {
+        openness: 0.8,
+        conscientiousness: 0.7
+      },
       writingStyle: {
         formal: 0.6,
         technical: 0.7,
         friendly: 0.8,
         emotional: 0.4
       },
-      topicPreferences: ['AI', 'technology', 'development']
+      topicPreferences: ['AI', 'technology', 'development'],
+      matchScore: 0.85
     },
     paymentRequired: false,
     freeUsesLeft: 4,

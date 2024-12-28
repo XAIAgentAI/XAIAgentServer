@@ -120,7 +120,7 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
     const analytics = await userAnalyticsService.getOrCreateUserAnalytics(userId);
 
     // Validate and process payment if needed
-    const paymentResult = await paymentService.validateAndProcessPayment(userAddress, analytics);
+    const paymentResult = await paymentService.validateAndProcessPayment({ userId, amount: 1, type: 'matching', analytics });
     
     if (!paymentResult.success) {
       return res.status(402).json({
@@ -167,6 +167,7 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
       commonInterests: (result.data as MatchingAnalysisResult).commonInterests || [],
       potentialSynergies: (result.data as MatchingAnalysisResult).potentialSynergies || [],
       challenges: (result.data as MatchingAnalysisResult).challenges || [],
+      opportunities: (result.data as MatchingAnalysisResult).opportunities || [],
       recommendations: (result.data as MatchingAnalysisResult).recommendations || [],
       compatibilityDetails: (result.data as MatchingAnalysisResult).compatibilityDetails || {
         values: 0,
@@ -174,7 +175,12 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
         interests: 0
       },
       personalityTraits: (result.data as MatchingAnalysisResult).personalityTraits || {},
-      writingStyle: (result.data as MatchingAnalysisResult).writingStyle || {},
+      writingStyle: (result.data as MatchingAnalysisResult).writingStyle || {
+        formal: 0,
+        technical: 0,
+        friendly: 0,
+        emotional: 0
+      },
       topicPreferences: (result.data as MatchingAnalysisResult).topicPreferences || [],
       matchScore: (result.data as MatchingAnalysisResult).matchScore || 0,
       transactionHash: paymentResult.transactionHash
@@ -183,6 +189,7 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
       commonInterests: [],
       potentialSynergies: [],
       challenges: [],
+      opportunities: [],
       recommendations: [],
       compatibilityDetails: {
         values: 0,
@@ -190,7 +197,12 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
         interests: 0
       },
       personalityTraits: {},
-      writingStyle: {},
+      writingStyle: {
+        formal: 0,
+        technical: 0,
+        friendly: 0,
+        emotional: 0
+      },
       topicPreferences: [],
       matchScore: 0,
       transactionHash: paymentResult.transactionHash

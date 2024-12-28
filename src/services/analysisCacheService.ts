@@ -25,19 +25,11 @@ interface AnalysisCache {
   expiresAt: Date;  // Internal field for cache management
 }
 
-import Redis from 'ioredis';
+import IORedis from 'ioredis';
+const Redis = IORedis;
 
 // Redis client interface
-interface RedisClient {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<'OK'>;
-  setnx(key: string, value: string): Promise<number>;
-  incr(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<number>;
-  ttl(key: string): Promise<number>;
-  del(key: string): Promise<number>;
-  on(event: string, callback: (err?: Error) => void): void;
-}
+type RedisClient = IORedis;
 
 // Redis configuration
 interface RedisConfig {
@@ -59,7 +51,7 @@ const redisConfig: RedisConfig = {
 };
 
 // Create mock Redis client for tests
-const mockRedisClient: RedisClient = {
+const mockRedisClient = {
   get: async (key: string) => {
     if (key.endsWith(':hits')) {
       const cacheKey = key.replace(':hits', '');
@@ -185,8 +177,12 @@ const mockRedisClient: RedisClient = {
     }
     return 0;
   },
-  del: async (key: string) => {
-    return analysisCache.delete(key) ? 1 : 0;
+  del: async (...args: any[]) => {
+    const key = args[0];
+    const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : undefined;
+    const result = analysisCache.delete(key) ? 1 : 0;
+    if (callback) callback(null, result);
+    return result;
   },
   ttl: async (key: string) => {
     const cache = analysisCache.get(key);
@@ -198,44 +194,53 @@ const mockRedisClient: RedisClient = {
     }
     return -1;
   },
-  on: (event: string, callback: (err?: Error) => void) => {
-    if (event === 'error' && callback) {
-      callback();
+  on: function(event: string | symbol, listener: (...args: any[]) => void) {
+    if (event === 'error' && listener) {
+      listener();
     }
-  }
+    return this;
+  } as any
 };
 
 // Initialize Redis client
-let redisClient: RedisClient;
+let redisClient: any;
 
-try {
-  if (process.env.NODE_ENV === 'test') {
-    console.log('Using mock Redis client for tests');
-    redisClient = mockRedisClient;
-  } else {
-    console.log('Initializing Redis client with config:', {
-      host: redisConfig.host,
-      port: redisConfig.port,
-      db: redisConfig.db
-    });
-    const client = new Redis(redisConfig);
-    redisClient = client as unknown as RedisClient;
-  }
-
-  // Handle Redis errors
-  redisClient.on('error', (err?: Error) => {
+// Initialize Redis client
+async function initRedis() {
+  try {
     if (process.env.NODE_ENV === 'test') {
-      console.log('Mock Redis client error (expected in tests):', err);
+      console.log('Using mock Redis client for tests');
+      redisClient = mockRedisClient;
     } else {
-      console.error('Redis Client Error:', err);
+      console.log('Initializing Redis client with config:', {
+        host: redisConfig.host,
+        port: redisConfig.port,
+        db: redisConfig.db
+      });
+      const client = new Redis();
+      await client.connect();
+      await client.select(redisConfig.db);
+      redisClient = client as unknown as RedisClient;
     }
-  });
-} catch (error) {
-  console.error('Failed to initialize Redis client:', error);
-  // Fallback to mock client in case of initialization failure
-  console.log('Falling back to mock Redis client');
-  redisClient = mockRedisClient;
+
+    // Handle Redis errors
+    redisClient.on('error', (err?: Error) => {
+      if (process.env.NODE_ENV === 'test') {
+        console.log('Mock Redis client error (expected in tests):', err);
+      } else {
+        console.error('Redis Client Error:', err);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to initialize Redis client:', error);
+    // Fallback to mock client in case of initialization failure
+    console.log('Falling back to mock Redis client');
+    redisClient = mockRedisClient;
+  }
 }
+
+// Initialize Redis when module loads
+initRedis().catch(console.error);
 
 // In-memory cache for development. In production, this should use Redis or similar
 const analysisCache = new Map<string, AnalysisCache>();
@@ -280,7 +285,7 @@ setInterval(cleanExpiredCache, 60 * 60 * 1000); // Clean every hour
 /**
  * Get cached analysis results
  */
-async function getCachedAnalysis(
+export async function getCachedAnalysis(
   userId: string,
   analysisType: 'personal' | 'matching',
   targetUserId?: string,
@@ -407,7 +412,7 @@ async function getCachedAnalysis(
  * @param targetUserId - Optional target user ID for matching analysis
  * @returns The current number of hits for this analysis
  */
-async function cacheAnalysis(
+export async function cacheAnalysis(
   userId: string,
   analysisType: 'personal' | 'matching',
   results: PersonalAnalysisResult | MatchingAnalysisResult,

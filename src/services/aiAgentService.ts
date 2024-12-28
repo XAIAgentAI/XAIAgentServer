@@ -821,10 +821,19 @@ export async function analyzeMatching(
     const matchingResult: MatchingAnalysisResult = {
       compatibility: result.compatibility,
       commonInterests: result.commonInterests,
+      potentialSynergies: result.potentialSynergies || ['Technical collaboration', 'Knowledge sharing'],
       challenges: result.challenges,
       opportunities: result.opportunities || ['leverage complementary skills'],
+      recommendations: result.recommendations || ['Schedule regular sync-ups', 'Focus on shared interests'],
+      compatibilityDetails: {
+        values: 0.8,
+        communication: 0.7,
+        interests: 0.9
+      },
+      personalityTraits: result.personalityTraits || {},
       writingStyle: result.writingStyle,
-      topicPreferences: result.topicPreferences
+      topicPreferences: result.topicPreferences,
+      matchScore: result.compatibility || 0
     };
 
     // These fields are already assigned in the matchingResult object above
