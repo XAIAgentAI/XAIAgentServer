@@ -48,6 +48,7 @@ export interface XProfile {
   tweetCount?: number;
   createdAt?: string;
   lastTweetAt?: string;
+  id: string;
 }
 
 export interface XAccountData {

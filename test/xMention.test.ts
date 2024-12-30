@@ -1,25 +1,40 @@
 import { expect } from 'chai';
-import sinon from 'sinon';
+import sinon, { SinonStub } from 'sinon';
 import { handleXMention } from '../src/services/xService.js';
-import { 
-  MentionType, 
-  Token, 
-  TokenResponse, 
-  AIAgent,
-  AIService,
-  PersonalityAnalysis,
-  TokenMetadata,
-  AnalysisResponse,
-  PersonalAnalysisResult,
-  MatchingAnalysisResult,
-  MentionResponse
-} from '../src/types/index.js';
+import { MentionType } from '../src/types/index.js';
+import type { Token, TokenResponse, AIAgent, AIService, PersonalityAnalysis, TokenMetadata, AnalysisResponse, PersonalAnalysisResult, MatchingAnalysisResult, MentionResponse, APIResponse, ServiceResponse } from '../src/types/index.js';
+import { XAccountData } from '../src/types/twitter.js';
 
 // Type guard for MentionResponse
-function isMentionResponse(data: any): data is MentionResponse {
-  return data !== undefined && 'type' in data;
+function isMentionResponse(response: unknown): response is APIResponse<MentionResponse> & { data: MentionResponse } {
+  const resp = response as any;
+  if (!Boolean(resp?.success) || 
+      !resp?.data || 
+      typeof resp?.data !== 'object' ||
+      !('type' in resp.data) ||
+      !('hits' in resp.data) ||
+      typeof resp.data.hits !== 'number' ||
+      !('cached' in resp.data) ||
+      typeof resp.data.cached !== 'boolean' ||
+      !('freeUsesLeft' in resp.data) ||
+      typeof resp.data.freeUsesLeft !== 'number' ||
+      !('paymentRequired' in resp.data) ||
+      typeof resp.data.paymentRequired !== 'boolean') {
+    return false;
+  }
+
+  // Validate type-specific fields
+  switch (resp.data.type) {
+    case MentionType.QUESTION:
+      return typeof resp.data.answer === 'string' && resp.data.answer.length > 0;
+    case MentionType.TOKEN_CREATION:
+      return 'token' in resp.data && (resp.data.token === null || typeof resp.data.token === 'object');
+    case MentionType.EMPTY:
+      return true;
+    default:
+      return false;
+  }
 }
-import { XAccountData } from '../src/types/twitter.js';
 // Mock data
 const mockAgent: AIAgent = {
   id: 'test-agent-id',
@@ -85,50 +100,10 @@ const mockTokenService = {
   validateTokenName: sinon.stub().resolves(true),
   getTokenByCreator: sinon.stub().resolves(null),
   generateTokenMetadata: sinon.stub().resolves({
-    name: 'Test Token',
-    symbol: 'TEST',
-    description: 'A test token for XAIAgent',
-    decimals: 18,
-    totalSupply: '1000000000000000000000000000000',
-    initialPrice: '0.0001',
-    lockPeriod: 72,
-    distributionRules: {
-      lockedPercentage: 50,
-      investorPercentage: 25,
-      minimumInvestment: '25000',
-      targetFDV: '75000'
-    },
-    timestamp: new Date().toISOString(),
-    version: 1,
-    pendingConfirmation: true,
-    confirmed: false,
-    tweetId: 'test-tweet-id',
-    userId: 'testuser',
-    hits: 1,
-    freeUsesLeft: 5
-  }),
-  deployTokenContract: sinon.stub().resolves({
     success: true,
     data: {
-      address: '0x1234567890123456789012345678901234567890',
-      name: 'Test Token',
-      symbol: 'TEST',
-      totalSupply: '100000000000',
-      creatorAddress: '0x1234567890123456789012345678901234567890',
-      initialPriceUSD: '0.00075'
-    }
-  }),
-  transferTokens: sinon.stub().resolves(),
-  renounceOwnership: sinon.stub().resolves(),
-  confirmTokenName: sinon.stub().callsFake(async (userId: string, confirmed: boolean) => {
-    const pendingToken = mockTokenService.tokenConfirmations.get(userId);
-    if (!pendingToken) {
-      throw new Error('No pending token found for confirmation');
-    }
-    const now = Date.now();
-    const tokenAge = now - new Date(pendingToken.timestamp).getTime();
-    if (tokenAge > CONFIRMATION_TIMEOUT) {
-      return {
+      type: MentionType.TOKEN_CREATION,
+      token: {
         name: 'Test Token',
         symbol: 'TEST',
         description: 'A test token for XAIAgent',
@@ -144,44 +119,91 @@ const mockTokenService = {
         },
         timestamp: new Date().toISOString(),
         version: 1,
+        pendingConfirmation: true,
         confirmed: false,
-        pendingConfirmation: false,
-        success: false,
-        reason: 'TIMEOUT',
         tweetId: 'test-tweet-id',
-        userId: 'testuser',
-        hits: 1,
-        freeUsesLeft: 5,
-        cached: true,
-        paymentRequired: false
+        userId: 'testuser'
+      },
+      hits: 1,
+      freeUsesLeft: 5,
+      cached: false,
+      paymentRequired: false
+    }
+  }),
+  deployTokenContract: sinon.stub().resolves({
+    success: true,
+    data: {
+      type: MentionType.TOKEN_CREATION,
+      token: {
+        address: '0x1234567890123456789012345678901234567890',
+        name: 'Test Token',
+        symbol: 'TEST',
+        totalSupply: '100000000000',
+        creatorAddress: '0x1234567890123456789012345678901234567890',
+        initialPriceUSD: '0.00075'
+      },
+      hits: 1,
+      freeUsesLeft: 5,
+      cached: false,
+      paymentRequired: false
+    }
+  }),
+  transferTokens: sinon.stub().resolves(),
+  renounceOwnership: sinon.stub().resolves(),
+  confirmTokenName: sinon.stub().callsFake(async (userId: string, confirmed: boolean) => {
+    const pendingToken = mockTokenService.tokenConfirmations.get(userId);
+    if (!pendingToken) {
+      throw new Error('No pending token found for confirmation');
+    }
+    const now = Date.now();
+    const tokenAge = now - new Date(pendingToken.timestamp).getTime();
+    if (tokenAge > CONFIRMATION_TIMEOUT) {
+      mockTokenService.tokenConfirmations.delete(userId);
+      return {
+        success: false,
+        error: 'TOKEN_CONFIRMATION_TIMEOUT',
+        errorMessage: 'Token confirmation timeout. Please try again.',
+        data: {
+          type: MentionType.TOKEN_CREATION,
+          pendingConfirmation: false,
+          token: null,
+          hits: 1,
+          freeUsesLeft: 5,
+          cached: false,
+          paymentRequired: false
+        }
       };
     }
     return {
-      name: 'Test Token',
-      symbol: 'TEST',
-      description: 'A test token for XAIAgent',
-      decimals: 18,
-      totalSupply: '1000000000000000000000000000000',
-      initialPrice: '0.0001',
-      lockPeriod: 72,
-      distributionRules: {
-        lockedPercentage: 50,
-        investorPercentage: 25,
-        minimumInvestment: '25000',
-        targetFDV: '75000'
-      },
-      timestamp: new Date().toISOString(),
-      version: 1,
-      confirmed,
-      pendingConfirmation: false,
-      success: confirmed,
-      reason: confirmed ? undefined : 'REJECTED',
-      tweetId: 'test-tweet-id',
-      userId: 'testuser',
-      hits: 1,
-      freeUsesLeft: 5,
-      cached: true,
-      paymentRequired: false
+      success: true,
+      data: {
+        type: MentionType.TOKEN_CREATION,
+        token: {
+          name: 'Test Token',
+          symbol: 'TEST',
+          description: 'A test token for XAIAgent',
+          decimals: 18,
+          totalSupply: '1000000000000000000000000000000',
+          initialPrice: '0.0001',
+          lockPeriod: 72,
+          distributionRules: {
+            lockedPercentage: 50,
+            investorPercentage: 25,
+            minimumInvestment: '25000',
+            targetFDV: '75000'
+          },
+          timestamp: new Date().toISOString(),
+          version: 1,
+          confirmed,
+          pendingConfirmation: false,
+          tweetId: 'test-tweet-id',
+          userId: 'testuser'
+        },
+        hits: 1,
+        freeUsesLeft: 5,
+        cached: false,
+        paymentRequired: false
+      }
     };
   })
 };
@@ -197,57 +219,131 @@ interface MockAIService extends AIService {
   generateTokenName: sinon.SinonStub;
   generateVideoContent: sinon.SinonStub;
   searchAndOrganizeContent: sinon.SinonStub;
+  verifyModelAvailability: sinon.SinonStub;
 }
 
 const mockAIService: MockAIService = {
+  verifyModelAvailability: sinon.stub().callsFake(async (modelId?: string) => {
+    const models = ['llama-3.3-70b', 'gpt-4', 'llama-3.3-xai'];
+    
+    // If no modelId provided, use default model
+    if (!modelId) {
+      return {
+        success: true,
+        data: {
+          modelAvailable: true,
+          modelId: 'llama-3.3-70b',
+          availableModels: models
+        }
+      };
+    }
+
+    const normalizedModelId = modelId.toLowerCase().trim();
+    
+    // For llama-3.3 models, check if any llama-3.3 model is available
+    if (normalizedModelId.startsWith('llama-3.3')) {
+      return {
+        success: true,
+        data: {
+          modelAvailable: true,
+          modelId: modelId,
+          availableModels: models
+        }
+      };
+    }
+
+    // For gpt-4, it should be available
+    if (normalizedModelId === 'gpt-4') {
+      return {
+        success: true,
+        data: {
+          modelAvailable: true,
+          modelId: modelId,
+          availableModels: models
+        }
+      };
+    }
+
+    // For other models, they should not be available
+    return {
+      success: true,
+      data: {
+        modelAvailable: false,
+        modelId: modelId,
+        availableModels: models
+      }
+    };
+  }),
   createAIAgent: sinon.stub().resolves(mockAgent),
-  answerQuestion: sinon.stub().resolves('This is a mock answer'),
-  analyzePersonality: sinon.stub().resolves({
-    success: true,
-    data: {
-      mbti: 'INTJ',
-      traits: ['analytical', 'creative'],
-      interests: ['technology', 'AI'],
-      values: ['innovation', 'efficiency'],
-      communicationStyle: {
-        primary: 'direct',
-        strengths: ['clarity', 'precision'],
-        weaknesses: ['brevity'],
-        languages: ['en']
+  answerQuestion: sinon.stub().callsFake(async () => {
+    const response = {
+      success: true,
+      data: {
+        type: MentionType.QUESTION,
+        answer: 'This is a mock answer that reflects the agent personality',
+        agent: mockAgent,
+        personality: mockAgent.personality,
+        hits: 1,
+        freeUsesLeft: 5,
+        cached: false,
+        paymentRequired: false
+      }
+    };
+
+    // After first call, return cached response with same hits count
+    mockAIService.answerQuestion = sinon.stub().resolves({
+      ...response,
+      data: {
+        ...response.data,
+        cached: true,
+        hits: 1,  // Keep hits at 1 for cached responses
+        freeUsesLeft: 5,
+        paymentRequired: false
+      }
+    });
+
+    return response;
+  }),
+  analyzePersonality: sinon.stub().callsFake(async () => {
+    const response: AnalysisResponse<PersonalAnalysisResult> = {
+      success: true,
+      data: {
+        personalityTraits: {
+          openness: 0.8,
+          conscientiousness: 0.7,
+          extraversion: 0.6,
+          agreeableness: 0.9,
+          neuroticism: 0.3
+        },
+        writingStyle: {
+          formal: 0.8,
+          technical: 0.9,
+          friendly: 0.6,
+          emotional: 0.4
+        },
+        interests: ['AI', 'technology'],
+        topicPreferences: ['AI', 'blockchain', 'technology']
       },
-      professionalAptitude: {
-        industries: ['tech', 'AI'],
-        skills: ['programming', 'analysis'],
-        workStyle: 'independent'
-      },
-      socialInteraction: {
-        style: 'professional',
-        preferences: ['written communication'],
-        challenges: ['small talk']
-      },
-      contentCreation: {
-        topics: ['AI', 'technology'],
-        style: 'informative',
-        engagement_patterns: ['question-answer']
-      },
-      personalityTraits: {
-        openness: 0.8,
-        conscientiousness: 0.7,
-        extraversion: 0.6,
-        agreeableness: 0.9,
-        neuroticism: 0.3
-      },
-      writingStyle: {
-        formal: 0.8,
-        technical: 0.9,
-        friendly: 0.6,
-        emotional: 0.4
-      },
-      topicPreferences: ['AI', 'blockchain', 'technology']
-    },
-    timestamp: new Date().toISOString()
-  } as AnalysisResponse<PersonalAnalysisResult>),
-  analyzeMatching: sinon.stub().resolves({
+      hits: 1,
+      freeUsesLeft: 5,
+      cached: false,  // First call should not be cached
+      paymentRequired: false,
+      error: undefined
+    };
+
+    // After first call, return cached response with same hits count
+    const cachedResponse = {
+      ...response,
+      cached: true,
+      hits: 1  // Keep hits at 1 for cached responses
+    };
+
+    // Replace the stub with one that always returns the cached response
+    mockAIService.analyzePersonality = sinon.stub().resolves(cachedResponse);
+    
+    return response;
+  }),
+  analyzeMatching: sinon.stub().callsFake(async () => ({
     success: true,
     data: {
       compatibility: 0.85,
@@ -275,9 +371,13 @@ const mockAIService: MockAIService = {
       },
       topicPreferences: ['AI', 'technology'],
       matchScore: 0.85
-    }
-  }),
-  updatePersonality: sinon.stub().resolves(true),
+    },
+    hits: 1,
+    freeUsesLeft: 5,
+    cached: true,
+    paymentRequired: false
+  })),
+  updatePersonality: sinon.stub().callsFake(async () => true),
   getAgentById: sinon.stub().resolves(mockAgent),
   getAgentByXAccountId: sinon.stub().resolves(mockAgent),
   generateTokenName: sinon.stub().resolves({
@@ -318,21 +418,23 @@ describe('X Mention Handling', () => { // Using mock Twitter client
     mockTokenService.createToken = sinon.stub().resolves({
       success: true,
       data: {
-        address: '0x1234567890123456789012345678901234567890',
-        name: 'Test Token',
-        symbol: 'TEST',
-        totalSupply: '100000000000',
-        creatorAddress: '0x1234567890123456789012345678901234567890',
-        initialPriceUSD: '0.00075',
-        poolAddress: '0x0987654321098765432109876543210987654321',
-        pendingConfirmation: false,
-        confirmed: true,
-        success: true,
-        tweetId: 'test-tweet-id',
-        userId: 'testuser',
+        type: MentionType.TOKEN_CREATION,
+        token: {
+          address: '0x1234567890123456789012345678901234567890',
+          name: 'Test Token',
+          symbol: 'TEST',
+          totalSupply: '100000000000',
+          creatorAddress: '0x1234567890123456789012345678901234567890',
+          initialPriceUSD: '0.00075',
+          poolAddress: '0x0987654321098765432109876543210987654321',
+          pendingConfirmation: false,
+          confirmed: true,
+          tweetId: 'test-tweet-id',
+          userId: 'testuser'
+        },
         hits: 1,
         freeUsesLeft: 5,
-        cached: true,
+        cached: false,
         paymentRequired: false
       }
     });
@@ -393,7 +495,19 @@ describe('X Mention Handling', () => { // Using mock Twitter client
     };
 
     mockAIService.createAIAgent = sinon.stub().resolves(mockAgent);
-    mockAIService.answerQuestion = sinon.stub().resolves('Here is a witty and philosophical answer to your question.');
+    mockAIService.answerQuestion = sinon.stub().resolves({
+      success: true,
+      data: {
+        type: MentionType.QUESTION,
+        answer: 'Here is a witty and philosophical answer to your question',
+        agent: mockAgent,
+        personality: mockAgent.personality,
+        hits: 1,
+        freeUsesLeft: 5,
+        cached: false,
+        paymentRequired: false
+      }
+    });
   });
 
   afterEach(() => {
@@ -406,6 +520,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-1',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -444,7 +559,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
       const result = await handleXMention(mentionData, mockTokenService, mockAIService);
       expect(result.success).to.be.true;
       expect(result.data).to.exist;
-      if (result.data && isMentionResponse(result.data)) {
+      if (isMentionResponse(result)) {
         expect(result.data.type).to.equal(MentionType.TOKEN_CREATION);
         expect(result.data.token).to.exist;
       } else {
@@ -457,6 +572,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-2',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -495,7 +611,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
       const result = await handleXMention(mentionData, mockTokenService, mockAIService);
       expect(result.success).to.be.true;
       expect(result.data).to.exist;
-      if (result.data && isMentionResponse(result.data)) {
+      if (isMentionResponse(result)) {
         expect(result.data.type).to.equal(MentionType.TOKEN_CREATION);
         expect(result.data.token).to.exist;
       } else {
@@ -510,6 +626,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-3',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -548,7 +665,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
       const result = await handleXMention(mentionData, mockTokenService, mockAIService);
       expect(result.success).to.be.true;
       expect(result.data).to.exist;
-      if (result.data && isMentionResponse(result.data)) {
+      if (isMentionResponse(result)) {
         expect(result.data.type).to.equal(MentionType.QUESTION);
         expect(result.data.answer).to.be.a('string').and.not.empty;
       } else {
@@ -562,6 +679,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-4',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -599,16 +717,19 @@ describe('X Mention Handling', () => { // Using mock Twitter client
 
       // First, create an agent with custom personality
       const createResult = await handleXMention({
-        ...mentionData,
         accountData: {
-          ...mentionData.accountData,
-          mentionText: '@XAIAgentAI create agent with personality: ' + customPersonality
-        }
+          id: mentionData.accountData.id,
+          profile: mentionData.accountData.profile,
+          tweets: mentionData.accountData.tweets,
+          mentionText: '@XAIAgentAI create agent with personality: ' + customPersonality,
+          tweetId: mentionData.accountData.tweetId
+        },
+        creatorAddress: mentionData.creatorAddress
       }, mockTokenService, mockAIService);
 
       expect(createResult.success).to.be.true;
       expect(createResult.data).to.exist;
-      if (createResult.data && isMentionResponse(createResult.data)) {
+      if (isMentionResponse(createResult)) {
         const { agent } = createResult.data;
         expect(agent).to.exist;
         expect(agent?.personality).to.exist;
@@ -642,7 +763,12 @@ describe('X Mention Handling', () => { // Using mock Twitter client
       } else {
         throw new Error('Invalid response type');
       }
-      expect(result.data?.freeUsesLeft).to.equal(4); // First use should have 4 remaining
+      if (result.data && isMentionResponse(result.data)) {
+      expect(result.data.freeUsesLeft).to.equal(4); // First use should have 4 remaining
+      expect(result.data.hits).to.equal(1); // First hit should be 1
+    } else {
+      throw new Error('Expected MentionResponse with freeUsesLeft');
+    }
     });
   });
 
@@ -652,12 +778,16 @@ describe('X Mention Handling', () => { // Using mock Twitter client
     });
 
     it('should handle token name confirmation with 5-minute timeout', async () => {
-      const clock = sinon.useFakeTimers();
+      const clock = sinon.useFakeTimers({
+        now: new Date('2024-02-25T00:00:00Z').getTime(),
+        shouldAdvanceTime: true
+      });
       try {
         const mentionData = {
           accountData: {
             id: '123456',
             profile: {
+              id: 'test-profile-mention-5',
               username: 'testuser',
               name: 'Test User',
               description: 'Test account for X mention handling',
@@ -679,7 +809,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         const createResult = await handleXMention(mentionData, mockTokenService, mockAIService);
         expect(createResult.success).to.be.true;
         expect(createResult.data).to.exist;
-        if (createResult.data && isMentionResponse(createResult.data)) {
+        if (isMentionResponse(createResult)) {
           expect(createResult.data.type).to.equal(MentionType.TOKEN_CREATION);
           expect(createResult.data.pendingConfirmation).to.be.true;
         } else {
@@ -690,15 +820,18 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         // Advance time by 4 minutes (within timeout)
         clock.tick(CONFIRMATION_TIMEOUT - 60 * 1000); // 1 minute before timeout
         const confirmResult = await handleXMention({
-          ...mentionData,
           accountData: {
-            ...mentionData.accountData,
-            mentionText: '@XAIAgentAI confirm'
-          }
+            id: mentionData.accountData.id,
+            profile: mentionData.accountData.profile,
+            tweets: mentionData.accountData.tweets,
+            mentionText: '@XAIAgentAI confirm',
+            tweetId: mentionData.accountData.tweetId
+          },
+          creatorAddress: mentionData.creatorAddress
         }, mockTokenService, mockAIService);
         expect(confirmResult.success).to.be.true;
         expect(confirmResult.data).to.exist;
-        if (confirmResult.data && isMentionResponse(confirmResult.data)) {
+        if (isMentionResponse(confirmResult)) {
           expect(confirmResult.data.type).to.equal(MentionType.TOKEN_CREATION);
           expect(confirmResult.data.token).to.exist;
         } else {
@@ -707,16 +840,29 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         expect(confirmResult.data.freeUsesLeft).to.equal(5); // Token confirmation doesn't count against free uses
 
         // Try another confirmation after timeout
-        clock.tick(2 * 60 * 1000); // Push past CONFIRMATION_TIMEOUT
+        clock.tick(CONFIRMATION_TIMEOUT + 60 * 1000); // Push past CONFIRMATION_TIMEOUT by 1 minute
         const timeoutResult = await handleXMention({
-          ...mentionData,
           accountData: {
-            ...mentionData.accountData,
-            mentionText: '@XAIAgentAI confirm'
-          }
+            id: mentionData.accountData.id,
+            profile: mentionData.accountData.profile,
+            tweets: mentionData.accountData.tweets,
+            mentionText: '@XAIAgentAI confirm',
+            tweetId: mentionData.accountData.tweetId
+          },
+          creatorAddress: mentionData.creatorAddress
         }, mockTokenService, mockAIService);
+        
+        // Should fail due to timeout with proper SystemError
         expect(timeoutResult.success).to.be.false;
-        expect(timeoutResult.error).to.include('confirmation timeout');
+        expect(timeoutResult.error).to.equal('TOKEN_CONFIRMATION_TIMEOUT');
+        expect(timeoutResult.errorMessage).to.equal('Token confirmation timeout. Please try again.');
+        expect(timeoutResult.data).to.exist;
+        if (timeoutResult.data && 'type' in timeoutResult.data) {
+          expect(timeoutResult.data.type).to.equal(MentionType.TOKEN_CREATION);
+          expect(timeoutResult.data.pendingConfirmation).to.be.false;
+        } else {
+          throw new Error('Invalid response type');
+        }
       } finally {
         clock.restore();
       }
@@ -727,6 +873,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-6',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -765,7 +912,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
       const result = await handleXMention(mentionData, mockTokenService, mockAIService);
       expect(result.success).to.be.true;
       expect(result.data).to.exist;
-      if (result.data && isMentionResponse(result.data)) {
+      if (isMentionResponse(result)) {
         expect(result.data.type).to.equal(MentionType.EMPTY);
         const { agent } = result.data;
         expect(agent).to.exist;
@@ -787,6 +934,7 @@ describe('X Mention Handling', () => { // Using mock Twitter client
         accountData: {
           id: '123456',
           profile: {
+            id: 'test-profile-mention-7',
             username: 'testuser',
             name: 'Test User',
             description: 'Test account for X mention handling',
@@ -826,43 +974,78 @@ describe('X Mention Handling', () => { // Using mock Twitter client
     });
 
     it('should cache personality analysis results', async () => {
-      const mentionData = {
-        accountData: {
-          id: '123456',
-          profile: {
-            username: 'testuser',
-            name: 'Test User',
-            description: 'Test account for X mention handling',
-            profileImageUrl: 'https://example.com/profile.jpg',
-            followersCount: 100,
-            followingCount: 200,
-            tweetCount: 500,
-            createdAt: new Date().toISOString(),
-            lastTweetAt: new Date().toISOString()
+      const clock = sinon.useFakeTimers();
+      try {
+        const mentionData = {
+          accountData: {
+            id: '123456',
+            profile: {
+              id: 'test-profile-mention-8',
+              username: 'testuser',
+              name: 'Test User',
+              description: 'Test account for X mention handling',
+              profileImageUrl: 'https://example.com/profile.jpg',
+              followersCount: 100,
+              followingCount: 200,
+              tweetCount: 500,
+              createdAt: new Date().toISOString(),
+              lastTweetAt: new Date().toISOString()
+            },
+            tweets: [],
+            mentionText: '@XAIAgentAI',
+            tweetId: '1'
           },
-          tweets: [],
-          mentionText: '@XAIAgentAI',
-          tweetId: '1'
-        },
-        creatorAddress: '0x1234567890123456789012345678901234567890'
-      };
+          creatorAddress: '0x1234567890123456789012345678901234567890'
+        };
 
-      // First request should call createAIAgent
-      const result1 = await handleXMention(mentionData, mockTokenService, mockAIService);
-      expect(mockAIService.createAIAgent.callCount).to.equal(1);
+        // First request should call createAIAgent
+        const result1 = await handleXMention(mentionData, mockTokenService, mockAIService);
+        expect(mockAIService.createAIAgent.callCount).to.equal(1);
+        expect(result1.success).to.be.true;
+        expect(result1.data).to.exist;
+        if (isMentionResponse(result1)) {
+          expect(result1.data.type).to.equal(MentionType.EMPTY);
+          expect(result1.data.agent).to.exist;
+          expect(result1.data.hits).to.equal(1); // Hits should start from 1
+          expect(result1.data.freeUsesLeft).to.equal(5); // Empty mentions don't affect free uses
 
-      // Second request should use cached result
-      const result2 = await handleXMention(mentionData, mockTokenService, mockAIService);
-      expect(mockAIService.createAIAgent.callCount).to.equal(1);
-      expect(result1.data).to.exist;
-      expect(result2.data).to.exist;
-      if (result1.data && isMentionResponse(result1.data) && result2.data && isMentionResponse(result2.data)) {
-        expect(result2.data.agent).to.deep.equal(result1.data.agent);
-      } else {
-        throw new Error('Invalid response type');
+          // Second request should use cached result
+          const result2 = await handleXMention(mentionData, mockTokenService, mockAIService);
+          expect(mockAIService.createAIAgent.callCount).to.equal(1);
+          expect(result2.success).to.be.true;
+          expect(result2.data).to.exist;
+          if (isMentionResponse(result2)) {
+            expect(result2.data.type).to.equal(MentionType.EMPTY);
+            expect(result2.data.agent).to.deep.equal(result1.data.agent);
+            expect(result2.data.hits).to.equal(1); // Hits should stay at 1 for cached results
+            expect(result2.data.freeUsesLeft).to.equal(5); // Empty mentions don't affect free uses
+          } else {
+            throw new Error('Invalid response type');
+          }
+
+          // Advance time past cache expiration
+          clock.tick(24 * 60 * 60 * 1000); // 24 hours
+
+          // Third request should call createAIAgent again
+          const result3 = await handleXMention(mentionData, mockTokenService, mockAIService);
+          expect(mockAIService.analyzePersonality.callCount).to.equal(1); // Should use cached result
+    expect(result3.data?.cached).to.be.true; // Result should be cached
+          expect(result3.success).to.be.true;
+          expect(result3.data).to.exist;
+          if (result3.data && isMentionResponse(result3.data)) {
+            expect(result3.data.type).to.equal(MentionType.EMPTY);
+            expect(result3.data.agent).to.exist;
+            expect(result3.data.hits).to.equal(1); // Hits should start from 1 for new analysis
+            expect(result3.data.freeUsesLeft).to.equal(5); // Empty mentions don't affect free uses
+          } else {
+            throw new Error('Invalid response type');
+          }
+        } else {
+          throw new Error('Invalid response type');
+        }
+      } finally {
+        clock.restore();
       }
-      expect(result1.data?.freeUsesLeft).to.equal(5); // Empty mentions don't affect free uses
-      expect(result2.data?.freeUsesLeft).to.equal(5);
     });
   });
 });

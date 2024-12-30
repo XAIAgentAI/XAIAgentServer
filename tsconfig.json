@@ -1,23 +1,19 @@
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "es2020",
-    "moduleResolution": "node",
+    "target": "ES2022",
+    "module": "NodeNext",
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowJs": true,
-    "resolveJsonModule": true,
+    "moduleResolution": "NodeNext",
     "forceConsistentCasingInFileNames": true,
-    "types": ["node", "mocha", "chai", "sinon"]
-  },
-  "ts-node": {
-    "files": true,
-    "esm": true,
-    "experimentalSpecifierResolution": "node"
-  },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules"]
+    "resolveJsonModule": true,
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "declaration": true,
+    "allowJs": true,
+    "checkJs": false
+  }
 }

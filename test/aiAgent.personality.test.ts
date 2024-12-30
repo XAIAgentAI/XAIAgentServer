@@ -1,7 +1,7 @@
 import { expect } from 'chai';
-import { PersonalityAnalysis, AIAgent } from '../src/types';
-import { mergePersonalities } from '../src/services/aiAgentService';
-import { TweetService } from '../src/services/tweetService';
+import { PersonalityAnalysis, AIAgent } from '../src/types/index.js';
+import { mergePersonalities } from '../src/services/aiAgentService.js';
+import { TweetService } from '../src/services/tweetService.js';
 
 describe('AI Agent Personality Tests', () => {
   const basePersonality: PersonalityAnalysis = {

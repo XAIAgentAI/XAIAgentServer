@@ -163,48 +163,36 @@ router.post('/analyze/matching', async (req: express.Request, res: express.Respo
 
     // Create response with matching analysis result
     const matchingResult: MatchingAnalysisResult = result.data ? {
-      compatibility: (result.data as MatchingAnalysisResult).compatibility || 0,
       commonInterests: (result.data as MatchingAnalysisResult).commonInterests || [],
-      potentialSynergies: (result.data as MatchingAnalysisResult).potentialSynergies || [],
-      challenges: (result.data as MatchingAnalysisResult).challenges || [],
-      opportunities: (result.data as MatchingAnalysisResult).opportunities || [],
-      recommendations: (result.data as MatchingAnalysisResult).recommendations || [],
+      compatibility: (result.data as MatchingAnalysisResult).compatibility || 0,
       compatibilityDetails: (result.data as MatchingAnalysisResult).compatibilityDetails || {
-        values: 0,
         communication: 0,
-        interests: 0
+        interests: 0,
+        values: 0
       },
+      matchScore: (result.data as MatchingAnalysisResult).matchScore || (result.data as MatchingAnalysisResult).compatibility || 0,
+      opportunities: (result.data as MatchingAnalysisResult).opportunities || [],
       personalityTraits: (result.data as MatchingAnalysisResult).personalityTraits || {},
-      writingStyle: (result.data as MatchingAnalysisResult).writingStyle || {
-        formal: 0,
-        technical: 0,
-        friendly: 0,
-        emotional: 0
-      },
+      potentialSynergies: (result.data as MatchingAnalysisResult).potentialSynergies || [],
+      recommendations: (result.data as MatchingAnalysisResult).recommendations || [],
       topicPreferences: (result.data as MatchingAnalysisResult).topicPreferences || [],
-      matchScore: (result.data as MatchingAnalysisResult).matchScore || 0,
+      challenges: (result.data as MatchingAnalysisResult).challenges || [],
       transactionHash: paymentResult.transactionHash
     } : {
-      compatibility: 0,
       commonInterests: [],
-      potentialSynergies: [],
-      challenges: [],
-      opportunities: [],
-      recommendations: [],
+      compatibility: 0,
       compatibilityDetails: {
-        values: 0,
         communication: 0,
-        interests: 0
+        interests: 0,
+        values: 0
       },
-      personalityTraits: {},
-      writingStyle: {
-        formal: 0,
-        technical: 0,
-        friendly: 0,
-        emotional: 0
-      },
-      topicPreferences: [],
       matchScore: 0,
+      opportunities: [],
+      personalityTraits: {},
+      potentialSynergies: [],
+      recommendations: [],
+      topicPreferences: [],
+      challenges: [],
       transactionHash: paymentResult.transactionHash
     };
 
@@ -259,6 +247,7 @@ router.post('/:agentId/token/name', async (req, res) => {
     const xAccountData: XAccountData = {
       id: agent.xAccountId || '',
       profile: {
+        id: agent.xAccountId || '',
         username: agent.xHandle,
         name: agent.xHandle,
         description: agent.personality?.description || ''

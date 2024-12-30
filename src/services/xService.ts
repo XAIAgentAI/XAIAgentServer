@@ -1,4 +1,7 @@
 import { createAIAgent as defaultCreateAIAgent, answerQuestion as defaultAnswerQuestion } from './aiAgentService.js';
+import { setupStreamService, StreamService } from './streamService.js';
+import { XMentionEvent } from '../types/events.js';
+import { TwitterApi } from 'twitter-api-v2';
 import { analysisCacheService } from './analysisCacheService.js';
 const { cleanExpiredCache } = analysisCacheService;
 import * as defaultTokenService from './tokenService.js';
@@ -13,23 +16,17 @@ import {
   TokenMetadata,
   AIService,
   SystemError,
-  MentionResponse
+  MentionResponse,
+  ServiceResponse
 } from '../types/index.js';
 import { XAccountData } from '../types/twitter.js';
 import { tweetService } from './tweetService.js';
-import Redis from 'ioredis';
+import Redis, { RedisConfig, RedisClient } from '../types/redis.js';
 
-// Define Redis client type as the instance type of Redis
-type RedisType = InstanceType<typeof Redis>;
-
-// Redis configuration
-interface RedisConfig {
-  host: string;
-  port: number;
-  password?: string;
-  db: number;
-  retryStrategy: (times: number) => number;
-  maxRetriesPerRequest: number;
+// Create Redis client factory function
+function createRedisClient(config: RedisConfig): RedisClient {
+  const client = new Redis(config);
+  return client;
 }
 
 const redisConfig: RedisConfig = {
@@ -127,10 +124,23 @@ const mockRedisClient: MockRedisClient = {
 let redisClient: any;
 
 async function initRedis() {
-  if (process.env.NODE_ENV === 'test') {
+  // Check if we should use mock Redis
+  const useMockRedis = process.env.NODE_ENV === 'test' || process.env.MOCK_REDIS === 'true';
+  
+  if (useMockRedis) {
+    console.log('[xService] Using mock Redis client (MOCK_REDIS=true or NODE_ENV=test)');
     redisClient = mockRedisClient;
-  } else {
-    const client = new Redis({
+    return;
+  }
+
+  try {
+    console.log('[xService] Initializing Redis client with config:', {
+      host: redisConfig.host,
+      port: redisConfig.port,
+      db: redisConfig.db
+    });
+    
+    const client = createRedisClient({
       host: redisConfig.host,
       port: redisConfig.port,
       password: redisConfig.password,
@@ -138,13 +148,73 @@ async function initRedis() {
       retryStrategy: redisConfig.retryStrategy,
       maxRetriesPerRequest: redisConfig.maxRetriesPerRequest
     });
+
+    // Handle Redis errors
+    client.on('error', (err?: Error) => {
+      console.error('[xService] Redis Client Error:', err);
+      if (!redisClient || redisClient === client) {
+        console.log('[xService] Falling back to mock Redis client due to connection error');
+        redisClient = mockRedisClient;
+      }
+    });
+
     await client.select(parseInt(process.env.REDIS_DB || '0'));
     redisClient = client;
+  } catch (error) {
+    console.error('[xService] Failed to initialize Redis client:', error);
+    console.log('[xService] Falling back to mock Redis client');
+    redisClient = mockRedisClient;
   }
 }
 
 // Initialize Redis when module loads
 initRedis().catch(console.error);
+
+// Initialize stream service
+let streamService: StreamService | null = null;
+
+export async function startXStream() {
+  if (!streamService) {
+    try {
+      streamService = await setupStreamService();
+      
+      streamService.on('mention', async (event: XMentionEvent) => {
+        try {
+          const mentionText = event.data.mentionText || '';
+          console.log('Processing mention:', {
+            username: event.data.profile.username,
+            text: mentionText,
+            type: detectMentionType(mentionText)
+          });
+          
+          await handleXMention({
+            accountData: event.data,
+            creatorAddress: event.data.profile.id // Using user ID as creator address
+          });
+        } catch (error) {
+          console.error('Error handling mention from stream:', error);
+        }
+      });
+
+      streamService.on('error', (error: Error) => {
+        console.error('Stream service error:', error);
+      });
+
+      console.log('X mention stream started successfully');
+    } catch (error) {
+      console.error('Failed to start X mention stream:', error);
+      throw error;
+    }
+  }
+}
+
+export async function stopXStream() {
+  if (streamService) {
+    await streamService.stopStream();
+    streamService = null;
+    console.log('X mention stream stopped');
+  }
+}
 
 
 // Using AIService interface from types/index.ts
@@ -318,7 +388,15 @@ const defaultAIService: AIService = {
     version: 1
   }),
   generateVideoContent: async () => ({ url: '', duration: 0, format: '' }),
-  searchAndOrganizeContent: async () => ({ results: [], categories: [] })
+  searchAndOrganizeContent: async () => ({ results: [], categories: [] }),
+  verifyModelAvailability: async (modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean; modelId?: string; availableModels?: string[]; }>> => ({
+    success: true,
+    data: {
+      modelAvailable: true,
+      modelId: modelId || 'llama-3.3-70b',
+      availableModels: ['llama-3.3-70b', 'gpt-4', 'llama-3.3-xai']
+    }
+  })
 };
 
 function detectMentionType(mentionText: string): MentionType {
@@ -455,21 +533,27 @@ export async function handleXMention(
       const pendingToken = tokenConfirmations.get(mentionData.creatorAddress);
       console.log('Retrieved pending token:', pendingToken);
       
-      if (!pendingToken || Date.now() - new Date(pendingToken.timestamp).getTime() > 5 * 60 * 1000) {
+      const isTimeout = !pendingToken || Date.now() - new Date(pendingToken.timestamp).getTime() > 5 * 60 * 1000;
+      if (isTimeout) {
         console.log('Token confirmation timeout or not found. Time elapsed:', 
           pendingToken ? (Date.now() - new Date(pendingToken.timestamp).getTime()) / 1000 : 'N/A', 
           'seconds');
-        tokenConfirmations.delete(mentionData.creatorAddress);
+        if (pendingToken) {
+          tokenConfirmations.delete(mentionData.creatorAddress);
+        }
         return {
           success: false,
-          error: 'TOKEN_CONFIRMATION_TIMEOUT' as SystemError,
+          error: 'TOKEN_CONFIRMATION_TIMEOUT',
+          message: 'Token confirmation timed out. Please try again.',
           data: {
             agent,
             type: mentionType,
-            answer: 'Token confirmation timeout. Please start the token creation process again.',
+            error: 'TOKEN_CONFIRMATION_TIMEOUT',
+            errorMessage: 'Token confirmation timed out. Please try again.',
             freeUsesLeft: 5, // Token operations don't count against free uses
             hits: 1,
-            paymentRequired: false
+            paymentRequired: false,
+            cached: false
           },
           timestamp: new Date().toISOString()
         };
@@ -498,18 +582,27 @@ export async function handleXMention(
         const pendingToken = tokenConfirmations.get(mentionData.creatorAddress);
         console.log('Retrieved pending token:', pendingToken);
         
-        if (!pendingToken || Date.now() - new Date(pendingToken.timestamp).getTime() > 5 * 60 * 1000) {
+        const isTimeout = !pendingToken || Date.now() - new Date(pendingToken.timestamp).getTime() > 5 * 60 * 1000;
+        if (isTimeout) {
           console.log('Token confirmation timeout or not found. Time elapsed:', 
             pendingToken ? (Date.now() - new Date(pendingToken.timestamp).getTime()) / 1000 : 'N/A', 
             'seconds');
-          tokenConfirmations.delete(mentionData.creatorAddress);
+          if (pendingToken) {
+            tokenConfirmations.delete(mentionData.creatorAddress);
+          }
           return {
             success: false,
-            error: 'TOKEN_CONFIRMATION_TIMEOUT' as SystemError,
+            error: 'TOKEN_CONFIRMATION_TIMEOUT',
+            message: 'Token confirmation timed out. Please try again.',
             data: {
               agent,
               type: mentionType,
-              answer: 'Token confirmation timeout. Please start the token creation process again.'
+              error: 'TOKEN_CONFIRMATION_TIMEOUT',
+              errorMessage: 'Token confirmation timed out. Please try again.',
+              freeUsesLeft: 5, // Token operations don't count against free uses
+              hits: 1,
+              paymentRequired: false,
+              cached: false
             },
             timestamp: new Date().toISOString()
           };

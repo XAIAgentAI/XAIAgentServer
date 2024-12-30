@@ -23,7 +23,14 @@ describe('Training Data Management', () => {
     const aiAgentServiceModule = await import('../src/services/aiAgentService.js');
     aiAgentServiceModule.injectDependencies({
       decentralGPTClient: {
-        call: decentralGPTStub
+        call: decentralGPTStub,
+        fetchAvailableModels: async () => ['llama-3.3-70b', 'gpt-4', 'llama-3.3-xai'],
+        verifyModelAvailability: async (modelId?: string) => ({
+          success: true,
+          data: {
+            modelAvailable: true
+          }
+        })
       }
     });
   });

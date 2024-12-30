@@ -55,13 +55,13 @@ const cleanupInterval = setInterval(() => {
         
         // Post timeout notification
         TwitterClient.postResponse(
-          `Token name confirmation timed out. You can try again by mentioning me with "create token".`,
+          `Token confirmation timeout. Please try again.`,
           metadata.tweetId
         ).catch(error => {
           console.error('Error posting timeout notification:', error);
         });
         
-        console.log(`Token confirmation timed out for user ${userId}`);
+        console.log(`Token confirmation timeout for user ${userId}`);
       }
       tokenConfirmations.delete(userId);
     }
@@ -109,7 +109,7 @@ export async function confirmTokenName(userId: string, confirmed: boolean): Prom
   const tokenAge = now.getTime() - new Date(pendingToken.timestamp).getTime();
   
   if (tokenAge > CONFIRMATION_TIMEOUT) {
-    console.log(`Token confirmation timed out for user ${userId}`);
+    console.log(`Token confirmation timeout for user ${userId}`);
     const timeoutMetadata: TokenMetadata = {
       name: pendingToken.name,
       symbol: pendingToken.symbol,
@@ -146,7 +146,7 @@ export async function confirmTokenName(userId: string, confirmed: boolean): Prom
 
     try {
       await TwitterClient.postResponse(
-        `Token name confirmation timed out. You can try again by mentioning me with "create token".`,
+        `Token confirmation timeout. Please try again.`,
         pendingToken.tweetId
       );
     } catch (error) {
@@ -229,7 +229,7 @@ export async function confirmTokenName(userId: string, confirmed: boolean): Prom
             metadata: timeoutMetadata
           });
           tokenConfirmations.delete(userId);
-          console.log(`Token confirmation timed out for user ${userId}`);
+          console.log(`Token confirmation timeout for user ${userId}`);
         }
       }
     }, CONFIRMATION_TIMEOUT);
@@ -426,7 +426,7 @@ async function generateTokenMetadata(
           // Post timeout notification
           if (xAccountData.tweetId) {
             await TwitterClient.postResponse(
-              `Token name confirmation timed out. You can try again by mentioning me with "create token".`,
+              `Token confirmation timeout. Please try again.`,
               xAccountData.tweetId
             );
           }
@@ -521,7 +521,7 @@ async function generateTokenMetadata(
         // Post timeout notification
         if (xAccountData.tweetId) {
           await TwitterClient.postResponse(
-            `Token name confirmation timed out. You can try again by mentioning me with "create token".`,
+            `Token confirmation timeout. Please try again.`,
             xAccountData.tweetId
           );
         }
@@ -651,7 +651,7 @@ async function generateTokenMetadata(
       // Post timeout notification
       if (xAccountData.tweetId) {
         await TwitterClient.postResponse(
-          `Token name confirmation timed out. You can try again by mentioning me with "create token".`,
+          `Token confirmation timeout. Please try again.`,
           xAccountData.tweetId
         );
       }

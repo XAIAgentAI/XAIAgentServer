@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import { router as webhookRouter } from './routes/webhook.js';
 import { router as aiAgentRouter } from './routes/aiAgent.js';
 import { router as tokenRouter } from './routes/token.js';
 import { router as trainingRouter } from './routes/training.js';
@@ -34,7 +33,6 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/webhook', webhookRouter);
 app.use('/ai-agent', aiAgentRouter);
 app.use('/token', tokenRouter);
 app.use('/training', trainingRouter);
@@ -58,11 +56,16 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Start server and scheduler
+// Start server and services
 import { startTweetScheduler } from './scheduler/tweetScheduler.js';
+import { setupStreamService } from './services/streamService.js';
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} at ${new Date().toISOString()}`);
+  
+  // Initialize stream service
+  setupStreamService()
+    .catch(error => console.error('Failed to setup stream service:', error));
   
   // Start the tweet scheduler
   startTweetScheduler();

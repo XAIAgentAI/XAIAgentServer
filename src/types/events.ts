@@ -62,3 +62,10 @@ export class TokenEventEmitter extends EventEmitter {
 
 // Export singleton instance
 export const tokenEvents = new TokenEventEmitter();
+
+// X Mention Event type
+import { XAccountData } from './twitter.js';
+export interface XMentionEvent {
+  type: 'mention';
+  data: XAccountData;
+}

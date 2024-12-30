@@ -11,13 +11,12 @@ interface AnalysisCache {
   data?: PersonalAnalysisResult | MatchingAnalysisResult;
   error?: SystemError;
   message?: string;
-  timeLeft?: number;
   paymentRequired?: boolean;
   freeUsesLeft?: number;
   transactionHash?: string;
   matchScore?: number;
   cached?: boolean;
-  hits?: number;
+  hits: number;
   cacheExpiry?: Date;
   userId: string;
   analysisType: 'personal' | 'matching';
@@ -25,22 +24,12 @@ interface AnalysisCache {
   expiresAt: Date;  // Internal field for cache management
 }
 
-import Redis from 'ioredis';
+import Redis, { RedisConfig, RedisClient } from '../types/redis.js';
 
-// Define Redis client type as the instance type of Redis
-type RedisType = InstanceType<typeof Redis>;
-
-// Redis client interface
-type RedisClient = RedisType;
-
-// Redis configuration
-interface RedisConfig {
-  host: string;
-  port: number;
-  password?: string;
-  db: number;
-  retryStrategy: (times: number) => number;
-  maxRetriesPerRequest: number;
+// Create Redis client factory function
+function createRedisClient(config: RedisConfig): RedisClient {
+  const client = new Redis(config);
+  return client;
 }
 
 const redisConfig: RedisConfig = {
@@ -106,8 +95,7 @@ const mockRedisClient = {
           success: true,
           cached: true,
           paymentRequired: false,
-          freeUsesLeft: 5,
-          timeLeft: 0
+          freeUsesLeft: 5
         };
         analysisCache.set(cacheKey, newCache);
         return 1;
@@ -130,19 +118,28 @@ const mockRedisClient = {
         if (isNaN(currentHits)) currentHits = 1; // Default to 1 if parse fails
       }
 
-      // Check if this is an empty mention
-      const isEmptyMention = cacheKey.includes(':empty:');
+      // Check if this is an empty mention or token operation
+      const isEmptyMention = cacheKey.includes(':empty:') || cacheKey.includes(':token:');
       
-      // For empty mentions, keep hits at 1, otherwise increment
-      const newHits = isEmptyMention ? 1 : currentHits + 1;
+      // For empty mentions and token operations, always keep hits at 1
+      // For other operations, increment hits starting from 1
+      const newHits = isEmptyMention ? 1 : Math.max(1, currentHits + 1);
       
       // Update hits in Redis and cache
       await mockRedisClient.set(key, newHits.toString());
       if (cache) {
         console.log(`Mock Redis: ${isEmptyMention ? 'Keeping' : 'Incrementing'} hits for ${cacheKey} ${isEmptyMention ? 'at 1' : `from ${currentHits} to ${newHits}`}`);
         cache.hits = newHits;
-        cache.freeUsesLeft = isEmptyMention ? 5 : Math.max(0, 5 - newHits);
-        cache.paymentRequired = !isEmptyMention && newHits > 5;
+        // Empty mentions and token operations don't affect free uses
+        if (isEmptyMention || key.includes(':token:')) {
+          cache.freeUsesLeft = 5;
+          cache.paymentRequired = false;
+        } else {
+          cache.freeUsesLeft = Math.max(0, 5 - newHits);
+          cache.paymentRequired = newHits > 5;
+        }
+        cache.success = true;
+        cache.cached = true;
         analysisCache.set(cacheKey, cache);
       } else {
         console.log(`Mock Redis: No cache found for ${cacheKey}, setting hits to ${newHits}`);
@@ -155,8 +152,7 @@ const mockRedisClient = {
           success: true,
           cached: true,
           paymentRequired: false,
-          freeUsesLeft: 5,
-          timeLeft: 0
+          freeUsesLeft: 5
         };
         analysisCache.set(cacheKey, newCache);
       }
@@ -209,39 +205,48 @@ let redisClient: any;
 
 // Initialize Redis client
 async function initRedis() {
+  // Check if we should use mock Redis
+  const useMockRedis = process.env.NODE_ENV === 'test' || process.env.MOCK_REDIS === 'true';
+  
+  if (useMockRedis) {
+    console.log('Using mock Redis client (MOCK_REDIS=true or NODE_ENV=test)');
+    redisClient = mockRedisClient;
+    return;
+  }
+
   try {
-    if (process.env.NODE_ENV === 'test') {
-      console.log('Using mock Redis client for tests');
-      redisClient = mockRedisClient;
-    } else {
-      console.log('Initializing Redis client with config:', {
-        host: redisConfig.host,
-        port: redisConfig.port,
-        db: redisConfig.db
-      });
-      const client = new Redis({
-        host: redisConfig.host,
-        port: redisConfig.port,
-        password: redisConfig.password,
-        db: redisConfig.db,
-        retryStrategy: redisConfig.retryStrategy,
-        maxRetriesPerRequest: redisConfig.maxRetriesPerRequest
-      });
-      await client.select(redisConfig.db);
-      redisClient = client as unknown as RedisClient;
-    }
+    console.log('Initializing Redis client with config:', {
+      host: redisConfig.host,
+      port: redisConfig.port,
+      db: redisConfig.db
+    });
+    
+    const client = createRedisClient({
+      host: redisConfig.host,
+      port: redisConfig.port,
+      password: redisConfig.password,
+      db: redisConfig.db,
+      retryStrategy: redisConfig.retryStrategy,
+      maxRetriesPerRequest: redisConfig.maxRetriesPerRequest,
+      showFriendlyErrorStack: true
+    });
 
     // Handle Redis errors
-    redisClient.on('error', (err?: Error) => {
-      if (process.env.NODE_ENV === 'test') {
-        console.log('Mock Redis client error (expected in tests):', err);
-      } else {
-        console.error('Redis Client Error:', err);
+    client.on('error', (err?: Error) => {
+      console.error('Redis Client Error:', err);
+      if (!redisClient || redisClient === client) {
+        console.log('Falling back to mock Redis client due to connection error');
+        redisClient = mockRedisClient;
       }
     });
+
+    if (redisConfig.db !== undefined) {
+      await client.select(redisConfig.db);
+    }
+
+    redisClient = client as unknown as RedisClient;
   } catch (error) {
     console.error('Failed to initialize Redis client:', error);
-    // Fallback to mock client in case of initialization failure
     console.log('Falling back to mock Redis client');
     redisClient = mockRedisClient;
   }
@@ -318,20 +323,27 @@ export async function getCachedAnalysis(
     const cached = analysisCache.get(key);
     const currentHits = await redisClient.get(hitsKey);
     
-    if (!cached || !currentHits) {
-      // For new entries, always start at 1
+    // Check if this is a free operation (empty mention or token operation)
+    const isTokenOperation = key.includes(':token:');
+    const isEmptyMention = key.includes(':empty:');
+    const isFreeOperation = isEmptyMention || isTokenOperation;
+    
+    if (isFreeOperation) {
+      // For free operations, always keep hits at 1
       hits = 1;
       await redisClient.set(hitsKey, '1');
+      console.log(`${isEmptyMention ? 'Empty mention' : 'Token operation'} - keeping hits at 1 for ${key}`);
+    } else if (!cached || !currentHits) {
+      // For new entries, start at 1
+      hits = 1;
+      await redisClient.set(hitsKey, '1');
+      console.log(`New entry - setting hits to 1 for ${key}`);
     } else {
       // For existing entries
       const parsedHits = parseInt(currentHits);
-      hits = Math.max(1, !isNaN(parsedHits) ? parsedHits : 1);
-      
-      // Increment hits only on valid cache hit and non-empty mentions
-      if (cached.expiresAt > new Date() && !isEmptyMention) {
-        hits += 1;
-        await redisClient.set(hitsKey, hits.toString());
-      }
+      hits = Math.max(1, !isNaN(parsedHits) ? parsedHits + 1 : 1);
+      console.log(`Regular mention - incrementing hits to ${hits} for ${key}`);
+      await redisClient.set(hitsKey, hits.toString());
     }
 
     // Set expiry if not already set
@@ -345,7 +357,12 @@ export async function getCachedAnalysis(
     
     // Return cached analysis with updated hits if valid
     if (cachedAnalysis && cachedAnalysis.expiresAt > new Date()) {
-      console.log(`Cache hit for ${key}, hits: ${hits}`);
+      // For empty mentions and token operations, always keep hits at 1
+      const isTokenOperation = key.includes(':token:');
+      const isEmptyMention = key.includes(':empty:');
+      const finalHits = (isEmptyMention || isTokenOperation) ? 1 : hits;
+      
+      console.log(`Cache hit for ${key}, hits: ${finalHits}`);
       
       // Return cached result with updated hits
       const response: AnalysisResponse<PersonalAnalysisResult | MatchingAnalysisResult> = {
@@ -353,10 +370,10 @@ export async function getCachedAnalysis(
         data: cachedAnalysis.data,
         error: cachedAnalysis.error,
         message: cachedAnalysis.message,
-        hits,
+        hits: finalHits,
         cached: true,
-        paymentRequired: cachedAnalysis.paymentRequired || false,
-        freeUsesLeft: isEmptyMention ? 5 : Math.max(0, 5 - hits)
+        paymentRequired: !isEmptyMention && !isTokenOperation && hits > 5,
+        freeUsesLeft: (isEmptyMention || isTokenOperation) ? 5 : Math.max(0, 5 - hits)
       };
       
       // Update cache with new hits
@@ -383,19 +400,18 @@ export async function getCachedAnalysis(
       paymentRequired: false,
       freeUsesLeft: 5,
       expiresAt: new Date(Date.now() + CACHE_DURATION),
-      cacheExpiry: new Date(Date.now() + CACHE_DURATION),
-      timeLeft: 0
+      cacheExpiry: new Date(Date.now() + CACHE_DURATION)
     };
     analysisCache.set(key, newEntry);
 
-    // Return response with current hits (always start at 1)
+    // Return response with appropriate hits
     return {
       success: true,
       data: undefined,
-      hits,
+      hits: isFreeOperation ? 1 : hits,
       cached: false,
-      paymentRequired: false,
-      freeUsesLeft: Math.max(0, 5 - hits)
+      paymentRequired: !isFreeOperation && hits > 5,
+      freeUsesLeft: isFreeOperation ? 5 : Math.max(0, 5 - hits)
     };
   } catch (error) {
     console.error('Error in getCachedAnalysis:', error);
@@ -438,6 +454,10 @@ export async function cacheAnalysis(
   const hitsKey = `${key}:hits`;
   let hits = 1; // Start at 1 for first request
 
+  // Use the isEmptyMention parameter and check for token operations
+  const isTokenOperation = key.includes(':token:');
+  const isFreeOperation = isEmptyMention || isTokenOperation;
+
   try {
     // Clean expired entries if cache is full
     if (analysisCache.size >= MAX_CACHE_SIZE) {
@@ -457,6 +477,22 @@ export async function cacheAnalysis(
       redisClient.get(hitsKey),
       redisClient.ttl(hitsKey)
     ]);
+    
+    // For empty mentions and token operations, always return hits as 1
+    if (isFreeOperation) {
+      console.log(`${isEmptyMention ? 'Empty mention' : 'Token operation'} - keeping hits at 1 for ${key}`);
+      await redisClient.set(hitsKey, '1');
+      return {
+        success: true,
+        data: undefined,
+        hits: 1,
+        cached: false,
+        paymentRequired: false,
+        freeUsesLeft: 5
+      };
+    }
+    
+    console.log(`Cache key analysis - Key: ${key}, Contains empty: ${key.includes(':empty:')}, Contains token: ${key.includes(':token:')}`);
 
     if (!hitsStr) {
       // New entry - always start at 1
@@ -471,17 +507,23 @@ export async function cacheAnalysis(
       // Get cached entry to check expiry
       const cached = analysisCache.get(key);
       
+      // Check mention type
+      const isTokenOperation = key.includes(':token:');
+      const isEmptyMention = key.includes(':empty:');
+
       // Handle hits based on mention type
-      if (isEmptyMention) {
+      if (isEmptyMention || isTokenOperation) {
         hits = 1;
         await redisClient.set(hitsKey, '1');
-        console.log(`Empty mention - keeping hits at 1 for ${key}`);
+        console.log(`${isEmptyMention ? 'Empty mention' : 'Token operation'} - keeping hits at 1 for ${key}`);
       } else if (cached && cached.expiresAt > new Date()) {
         hits += 1;
         await redisClient.set(hitsKey, hits.toString());
         console.log(`Incrementing hits for ${key} to ${hits}`);
       } else {
-        console.log(`Using existing hits for ${key}: ${hits}`);
+        hits = 1;
+        await redisClient.set(hitsKey, '1');
+        console.log(`New or expired entry - setting hits to 1 for ${key}`);
       }
     }
 
@@ -492,7 +534,7 @@ export async function cacheAnalysis(
 
     console.log(`Set hits counter for ${key} to ${hits}`);
 
-    // Create or update cache entry with hits starting at 1
+    // Create or update cache entry
     const now = new Date();
     const cacheEntry: AnalysisCache = {
       success: true,
@@ -500,34 +542,39 @@ export async function cacheAnalysis(
       analysisType,
       targetUserId,
       data: results,
+      hits: isFreeOperation ? 1 : hits,
       expiresAt: new Date(now.getTime() + CACHE_DURATION),
       cacheExpiry: new Date(now.getTime() + CACHE_DURATION),
-      hits: hits, // Use the hits value we got above
       cached: true,
-      paymentRequired: false,
-      freeUsesLeft: isEmptyMention ? 5 : Math.max(0, 5 - hits),
-      timeLeft: 0
+      paymentRequired: !isFreeOperation && hits > 5,
+      freeUsesLeft: isFreeOperation ? 5 : Math.max(0, 5 - hits)
     };
     analysisCache.set(key, cacheEntry);
+    
+    // Use the previously defined isFreeOperation flag
+    const finalHits = isFreeOperation ? 1 : hits;
     
     return {
       success: true,
       data: results,
-      hits: isEmptyMention ? 1 : hits,
+      hits: finalHits,
       cached: true,
-      paymentRequired: !isEmptyMention && hits > 5,
-      freeUsesLeft: isEmptyMention ? 5 : Math.max(0, 5 - hits)
+      paymentRequired: !isFreeOperation && hits > 5,
+      freeUsesLeft: isFreeOperation ? 5 : Math.max(0, 5 - hits)
     };
   } catch (error) {
     console.error('Redis error in cacheAnalysis:', error);
+    // Use the previously defined isFreeOperation flag even in error case
+    const finalHits = isFreeOperation ? 1 : hits;
+    
     return {
       success: false,
       error: 'SYSTEM_ERROR',
       message: 'An unexpected error occurred',
-      hits: isEmptyMention ? 1 : hits,
+      hits: finalHits,
       cached: false,
-      paymentRequired: !isEmptyMention && hits > 5,
-      freeUsesLeft: isEmptyMention ? 5 : Math.max(0, 5 - hits)
+      paymentRequired: !isFreeOperation && hits > 5,
+      freeUsesLeft: isFreeOperation ? 5 : Math.max(0, 5 - hits)
     };
   }
 }

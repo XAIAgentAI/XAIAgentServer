@@ -37,6 +37,7 @@ export interface AIService {
   generateTokenName: (accountData: XAccountData) => Promise<TokenMetadata>;
   generateVideoContent: (prompt: string, agent: AIAgent) => Promise<{ url: string; duration: number; format: string; }>;
   searchAndOrganizeContent: (query: string, agent: AIAgent) => Promise<{ results: string[]; categories: string[]; }>;
+  verifyModelAvailability: (modelId?: string) => Promise<ServiceResponse<{ modelAvailable: boolean; modelId?: string; availableModels?: string[]; }>>;
 }
 
 export interface PersonalityAnalysis {
@@ -187,6 +188,9 @@ export interface MentionResponse {
   cached?: boolean;
   freeUsesLeft?: number;
   paymentRequired?: boolean;
+  error?: SystemError;
+  success?: boolean;
+  errorMessage?: string;
 }
 
 export type SystemError = 
@@ -206,18 +210,21 @@ export type SystemError =
 
 export type PaymentError = SystemError;
 
-export interface AnalysisResponse<T = PersonalAnalysisResult | MatchingAnalysisResult> {
+export interface BaseAnalysisResponse {
   success: boolean;
-  data?: T;
   error?: SystemError;
   message?: string;
-  paymentRequired?: boolean;
-  freeUsesLeft?: number;
   transactionHash?: string;
-  matchScore?: number;
-  cached?: boolean;
-  hits?: number;
   cacheExpiry?: Date;
+  hits?: number;
+  freeUsesLeft?: number;
+  cached?: boolean;
+  paymentRequired?: boolean;
+  timeLeft?: number;
+}
+
+export interface AnalysisResponse<T = PersonalAnalysisResult | MatchingAnalysisResult> extends BaseAnalysisResponse {
+  data?: T;
 }
 
 export interface CacheResponse<T = PersonalAnalysisResult | MatchingAnalysisResult> {
@@ -232,6 +239,7 @@ export interface APIResponse<T> {
   success: boolean;
   data?: T;
   error?: SystemError;
+  errorMessage?: string;
   timestamp: string;
   message?: string;
   paymentRequired?: boolean;
@@ -239,13 +247,11 @@ export interface APIResponse<T> {
   transactionHash?: string;
   matchScore?: number;
   pendingConfirmation?: boolean;
+  cached?: boolean;
+  hits?: number;
 }
 
-export interface PersonalAnalysisResult {
-  mbti: string;
-  traits: string[];
-  interests: string[];
-  values: string[];
+export interface PersonalAnalysisData {
   personalityTraits: {
     openness: number;
     conscientiousness: number;
@@ -259,56 +265,69 @@ export interface PersonalAnalysisResult {
     friendly: number;
     emotional: number;
   };
+  interests: string[];
   topicPreferences: string[];
-  communicationStyle: {
-    primary: string;
-    strengths: string[];
-    weaknesses: string[];
-    languages: string[];
-  };
-  professionalAptitude: {
-    industries: string[];
-    skills: string[];
-    workStyle: string;
-  };
-  socialInteraction: {
-    style: string;
-    preferences: string[];
-    challenges: string[];
-  };
-  contentCreation: {
-    topics: string[];
-    style: string;
-    engagement_patterns: string[];
-  };
+}
+
+export interface PersonalAnalysisResult extends PersonalAnalysisData {
+  hits?: number;
+  freeUsesLeft?: number;
+  cached?: boolean;
+  paymentRequired?: boolean;
+  timeLeft?: number;
 }
 
 export interface MatchingAnalysisResult {
-  compatibility: number;
   commonInterests: string[];
-  potentialSynergies: any[];
-  challenges: string[];
-  opportunities: string[];
-  recommendations: any[];
+  compatibility: number;
   compatibilityDetails: {
-    values: number;
     communication: number;
     interests: number;
+    values: number;
   };
-  personalityTraits: Record<string, any>;
-  writingStyle: {
-    formal: number;
-    technical: number;
-    friendly: number;
-    emotional: number;
-  };
-  topicPreferences: string[];
   matchScore: number;
+  opportunities: string[];
+  personalityTraits: Record<string, any>;
+  potentialSynergies: string[];
+  recommendations: string[];
+  topicPreferences: string[];
+  challenges?: string[];
   transactionHash?: string;
   hits?: number;
   cached?: boolean;
   freeUsesLeft?: number;
   paymentRequired?: boolean;
+}
+
+export interface ServiceResponse<T> {
+  success: boolean;
+  data: T;
+  error?: SystemError;
+  errorMessage?: string;
+}
+
+export interface ModelAvailabilityResponse extends ServiceResponse<{
+  modelAvailable: boolean;
+  modelId: string;
+  provider: string;
+  capabilities?: string[];
+}> {}
+
+export interface TokenDistributionResponse extends ServiceResponse<{
+  tokenId: string;
+  contractAddress: string;
+  status: 'pending' | 'completed' | 'failed';
+}> {}
+
+export interface TokenDistributionResult {
+  success: boolean;
+  data: {
+    creatorAmount: string;    // 10% to creator (30-day lock)
+    xaaAmount: string;        // 5% permanently locked with XAA
+    ecosystemAmount: string;  // 10% for ecosystem (180-day lock)
+    dbcAmount: string;        // 75% locked with DBC
+    transactionHash: string;
+  };
 }
 
 export interface TokenMetadata {
