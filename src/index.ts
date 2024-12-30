@@ -2,9 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import { redisClient } from './services/redisClient.js';
 import { router as aiAgentRouter } from './routes/aiAgent.js';
 import { router as tokenRouter } from './routes/token.js';
 import { router as trainingRouter } from './routes/training.js';
+import { router as registrationRouter } from './routes/registration.js';
 
 dotenv.config();
 
@@ -36,14 +38,36 @@ app.use((req, res, next) => {
 app.use('/ai-agent', aiAgentRouter);
 app.use('/token', tokenRouter);
 app.use('/training', trainingRouter);
+app.use('/auth', registrationRouter);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+// Enhanced health check and monitoring
+app.get('/health', async (req: express.Request, res: express.Response) => {
+  try {
+    // Check Redis connection
+    await redisClient.ping();
+    
+    const metrics = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      services: {
+        redis: 'connected',
+        api: 'running'
+      },
+      environment: process.env.NODE_ENV,
+      version: process.version
+    };
+    
+    res.json(metrics);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: errorMessage
+    });
+  }
 });
 
 // Error handling middleware
