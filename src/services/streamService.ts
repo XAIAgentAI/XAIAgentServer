@@ -246,11 +246,12 @@ export async function setupStreamService(): Promise<StreamService> {
         username: user.data.username
       });
     } catch (apiError) {
-      console.error('[StreamService] API access test failed:', {
-        error: apiError.message,
-        code: apiError.code,
-        data: apiError.data
-      });
+      const errorDetails = {
+        error: apiError instanceof Error ? apiError.message : 'Unknown error',
+        code: (apiError as any)?.code || 'UNKNOWN',
+        data: (apiError as any)?.data || null
+      };
+      console.error('[StreamService] API access test failed:', errorDetails);
       throw apiError;
     }
     
@@ -260,11 +261,12 @@ export async function setupStreamService(): Promise<StreamService> {
       const rules = await client.v2.streamRules();
       console.log('[StreamService] Current stream rules:', rules.data || []);
     } catch (rulesError) {
-      console.error('[StreamService] Stream rules test failed:', {
-        error: rulesError.message,
-        code: rulesError.code,
-        data: rulesError.data
-      });
+      const errorDetails = {
+        error: rulesError instanceof Error ? rulesError.message : 'Unknown error',
+        code: (rulesError as any)?.code || 'UNKNOWN',
+        data: (rulesError as any)?.data || null
+      };
+      console.error('[StreamService] Stream rules test failed:', errorDetails);
       throw rulesError;
     }
     
