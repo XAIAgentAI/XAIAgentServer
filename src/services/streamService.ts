@@ -11,6 +11,15 @@ export class StreamService extends EventEmitter {
   private reconnectAttempts: number = 0;
   private readonly maxReconnectAttempts: number = 5;
   private readonly reconnectDelay: number = 5000;
+  private processedTweetCount: number = 0;
+  private readonly maxTweetsToProcess: number = 100;
+  private totalTokenCount: number = 0;
+  private readonly maxTokenCount: number = 60000;
+
+  private countTokens(text: string): number {
+    // Simple token counting - approximately 4 chars per token
+    return Math.ceil(text.length / 4);
+  }
 
   constructor(client: TwitterApi) {
     super();
@@ -30,11 +39,11 @@ export class StreamService extends EventEmitter {
       // Add new rules to track mentions and specific commands
       await this.client.v2.updateStreamRules({
         add: [
-          { value: '@XAIAgentAI', tag: 'mentions' },
-          { value: '@XAIAgentAI create token OR 创建代币', tag: 'token_creation' },
-          { value: '@XAIAgentAI create bot OR 创建机器人', tag: 'bot_creation' },
-          { value: '@XAIAgentAI create virtual OR 创建虚拟人', tag: 'virtual_creation' },
-          { value: '@XAIAgentAI create agent OR 创建代理', tag: 'agent_creation' }
+          { value: '@XAIAgentAI -is:retweet', tag: 'mentions' },
+          { value: '@XAIAgentAI (create token OR 创建代币) -is:retweet', tag: 'token_creation' },
+          { value: '@XAIAgentAI (create bot OR 创建机器人) -is:retweet', tag: 'bot_creation' },
+          { value: '@XAIAgentAI (create virtual OR 创建虚拟人) -is:retweet', tag: 'virtual_creation' },
+          { value: '@XAIAgentAI (create agent OR 创建代理) -is:retweet', tag: 'agent_creation' }
         ]
       });
     } catch (error) {
@@ -45,6 +54,9 @@ export class StreamService extends EventEmitter {
 
   async startStream() {
     try {
+      // Reset counters on stream start
+      this.processedTweetCount = 0;
+      this.totalTokenCount = 0;
       await this.setupStreamRules();
 
       this.streamClient = await this.client.v2.searchStream({
@@ -91,10 +103,29 @@ export class StreamService extends EventEmitter {
 
       try {
         for await (const tweet of this.streamClient) {
-        // Skip retweets
-        if (tweet.data.referenced_tweets?.some((ref: { type: string }) => ref.type === 'retweeted')) {
-          continue;
-        }
+          // Stop processing after reaching max tweets
+          if (this.processedTweetCount >= this.maxTweetsToProcess) {
+            console.log(`[StreamService] Reached maximum tweet limit (${this.maxTweetsToProcess}). Waiting for new session.`);
+            continue;
+          }
+
+          // Skip retweets
+          if (tweet.data.referenced_tweets?.some((ref: { type: string }) => ref.type === 'retweeted')) {
+            continue;
+          }
+
+          // Count tokens in the tweet
+          const tweetTokens = this.countTokens(tweet.data.text);
+          
+          // Check token limit
+          if (this.totalTokenCount + tweetTokens > this.maxTokenCount) {
+            console.log(`[StreamService] Reached maximum token limit (${this.maxTokenCount}). Waiting for new session.`);
+            continue;
+          }
+
+          // Increment counters for original tweets
+          this.processedTweetCount++;
+          this.totalTokenCount += tweetTokens;
 
         const user = tweet.includes?.users?.find((u: { id: string; username: string; name: string; profile_image_url?: string }) => u.id === tweet.data.author_id);
         if (!user) {
@@ -176,10 +207,78 @@ export class StreamService extends EventEmitter {
 
 // Export setup function that creates and initializes stream service
 export async function setupStreamService(): Promise<StreamService> {
-  // Use Bearer Token authentication for read-only operations
-  const client = new TwitterApi(process.env.TWITTER_BEARER_TOKEN!);
-
-  const streamService = new StreamService(client);
-  await streamService.startStream();
-  return streamService;
+  // Initialize with OAuth 1.0a credentials for v2 API access
+  console.log('[StreamService] Initializing with OAuth 1.0a credentials...');
+  
+  try {
+    // Verify required environment variables
+    const requiredEnvVars = [
+      'TWITTER_ACCESS_TOKEN',
+      'TWITTER_ACCESS_TOKEN_SECRET',
+      'TWITTER_CLIENT_ID',
+      'TWITTER_CLIENT_SECRET'
+    ];
+    
+    for (const envVar of requiredEnvVars) {
+      if (!process.env[envVar]) {
+        throw new Error(`Missing required environment variable: ${envVar}`);
+      }
+    }
+    
+    // Create client with OAuth 1.0a credentials
+    const client = new TwitterApi({
+      accessToken: process.env.TWITTER_ACCESS_TOKEN!,
+      accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
+      appKey: process.env.TWITTER_CLIENT_ID!, // Using OAuth 2.0 Client ID as app key
+      appSecret: process.env.TWITTER_CLIENT_SECRET! // Using OAuth 2.0 Client Secret as app secret
+    });
+    console.log('[StreamService] Twitter API client created');
+    
+    const streamService = new StreamService(client);
+    
+    // Test API access before starting stream
+    try {
+      console.log('[StreamService] Testing API access...');
+      const user = await client.v2.me();
+      console.log('[StreamService] API access verified. User:', {
+        id: user.data.id,
+        name: user.data.name,
+        username: user.data.username
+      });
+    } catch (apiError) {
+      console.error('[StreamService] API access test failed:', {
+        error: apiError.message,
+        code: apiError.code,
+        data: apiError.data
+      });
+      throw apiError;
+    }
+    
+    // Test stream rules before starting
+    try {
+      console.log('[StreamService] Testing stream rules...');
+      const rules = await client.v2.streamRules();
+      console.log('[StreamService] Current stream rules:', rules.data || []);
+    } catch (rulesError) {
+      console.error('[StreamService] Stream rules test failed:', {
+        error: rulesError.message,
+        code: rulesError.code,
+        data: rulesError.data
+      });
+      throw rulesError;
+    }
+    
+    await streamService.startStream();
+    return streamService;
+  } catch (error) {
+    console.error('[StreamService] Service initialization error:', error);
+    if (error instanceof Error) {
+      console.error('[StreamService] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
+    throw error;
+  }
 }

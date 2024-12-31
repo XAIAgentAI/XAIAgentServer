@@ -227,8 +227,9 @@ describe('Empty mention handling', () => {
       throw new Error('Invalid response type');
     }
 
-    // Advance time past confirmation timeout
+    // Advance time past confirmation timeout and wait for events to process
     clock.tick(CONFIRMATION_TIMEOUT + 1000);
+    await new Promise(resolve => setTimeout(resolve, 0)); // Allow event loop to process timeouts
 
     // Attempt to confirm token name after timeout
     const confirmResult = await handleXMention({
@@ -243,9 +244,11 @@ describe('Empty mention handling', () => {
     expect(confirmResult.success).to.be.false;
     expect(confirmResult.error).to.equal('TOKEN_CONFIRMATION_TIMEOUT');
     expect(confirmResult.message).to.equal('Token confirmation timed out. Please try again.');
+    expect(tokenService.tokenConfirmations.get(accountData.id)).to.be.undefined; // Verify cleanup happened
 
-    // Advance time past confirmation timeout
+    // Advance time past confirmation timeout and wait for events to process
     clock.tick(CONFIRMATION_TIMEOUT + 1);
+    await new Promise(resolve => setTimeout(resolve, 0)); // Allow event loop to process timeouts
 
     // Try confirming after timeout
     const timeoutResult = await handleXMention({
@@ -258,6 +261,7 @@ describe('Empty mention handling', () => {
     expect(timeoutResult.success).to.be.false;
     expect(timeoutResult.error).to.equal('TOKEN_CONFIRMATION_TIMEOUT');
     expect(timeoutResult.message).to.equal('Token confirmation timed out. Please try again.');
+    expect(tokenService.tokenConfirmations.get(accountData.id)).to.be.undefined; // Verify cleanup happened
     expect(confirmTokenNameStub.called).to.be.false; // Should not call confirmTokenName after timeout
     expect(timeoutResult.data).to.exist;
     expect(timeoutResult.data?.freeUsesLeft).to.equal(5); // Token operations don't count against free uses

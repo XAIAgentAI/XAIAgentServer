@@ -10,6 +10,7 @@ import {
   ServiceResponse
 } from '../types/index.js';
 import { XAccountData, Tweet } from '../types/twitter.js';
+import { DECENTRALGPT_MODEL, DECENTRALGPT_PROJECT, DECENTRALGPT_ENDPOINT } from '../config/decentralgpt.js';
 // Allow dependency injection for testing
 import { userAnalyticsService as defaultUserAnalyticsService } from './userAnalyticsService.js';
 import { paymentService as defaultPaymentService } from './paymentService.js';
@@ -74,12 +75,13 @@ export async function fetchAvailableModels(): Promise<string[]> {
 interface DecentralGPTClient {
   call(prompt: string, context: string): Promise<string>;
   fetchAvailableModels(): Promise<string[]>;
-  verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean }>>;
+  verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean; modelId: string; availableModels: string[] }>>;
 }
 
 let _userAnalyticsService = defaultUserAnalyticsService;
 let _paymentService = defaultPaymentService;
 let _analysisCacheService = defaultAnalysisCacheService;
+
 let _decentralGPTClient: DecentralGPTClient = {
   async fetchAvailableModels(): Promise<string[]> {
     // Return mock models in test environment
@@ -88,48 +90,98 @@ let _decentralGPTClient: DecentralGPTClient = {
     }
     return fetchAvailableModels();
   },
-  async verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean }>> {
-    const availableModels = await this.fetchAvailableModels();
-    const targetModel = modelId || DECENTRALGPT_MODEL;
-    
-    // First check for exact match
-    if (availableModels.includes(targetModel)) {
+  async verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean; modelId: string; availableModels: string[] }>> {
+    try {
+      const availableModels = await this.fetchAvailableModels();
+      const defaultModel = 'llama-3.3-70b';
+      
+      // If no modelId provided, use default model
+      if (!modelId) {
+        const isDefaultAvailable = availableModels.some(m => m.toLowerCase() === defaultModel.toLowerCase());
+        // If default model is available, use it
+        if (isDefaultAvailable) {
+          return {
+            success: true,
+            data: {
+              modelAvailable: true,
+              modelId: defaultModel,
+              availableModels
+            }
+          };
+        }
+        // If default model is not available but there are other models, use the first available
+        if (availableModels.length > 0) {
+          return {
+            success: true,
+            data: {
+              modelAvailable: true,
+              modelId: availableModels[0],
+              availableModels
+            }
+          };
+        }
+        // No models available at all
+        return {
+          success: true,
+          data: {
+            modelAvailable: false,
+            modelId: defaultModel,
+            availableModels
+          }
+        };
+      }
+
+      const normalizedModelId = modelId.toLowerCase().trim();
+      
+      // For exact model matches
+      if (availableModels.some(m => m.toLowerCase() === normalizedModelId)) {
+        return {
+          success: true,
+          data: {
+            modelAvailable: true,
+            modelId: modelId,
+            availableModels
+          }
+        };
+      }
+
+      // For llama-3.3 models, check if any llama-3.3 model is available
+      if (normalizedModelId.startsWith('llama-3.3') || availableModels.some(m => m.toLowerCase().startsWith('llama-3.3'))) {
+        const llamaModels = availableModels.filter(m => m.toLowerCase().startsWith('llama-3.3'));
+        if (llamaModels.length > 0) {
+          const preferredModel = llamaModels.find(m => m.toLowerCase().includes('70b')) || llamaModels[0];
+          return {
+            success: true,
+            data: {
+              modelAvailable: true,
+              modelId: preferredModel,
+              availableModels
+            }
+          };
+        }
+      }
+
+      // For other models, return not available but include default model
       return {
         success: true,
         data: {
-          modelAvailable: true
+          modelAvailable: false, // Requested model is not available
+          modelId: defaultModel, // Fall back to default model
+          availableModels
+        }
+      };
+    } catch (error) {
+      console.error('Error verifying model availability:', error);
+      return {
+        success: false,
+        error: 'SYSTEM_ERROR',
+        data: {
+          modelAvailable: false,
+          modelId: modelId || 'llama-3.3-70b',
+          availableModels: []
         }
       };
     }
-    
-    // Then check for compatible models
-    const hasMatch = availableModels.some(model => {
-      const normalizedModel = model.toLowerCase();
-      const normalizedTarget = targetModel.toLowerCase();
-      
-      // Check for case-insensitive match
-      if (normalizedModel === normalizedTarget) {
-        return true;
-      }
-      
-      // Check for Llama model compatibility
-      if (normalizedModel.includes('llama') && normalizedTarget.includes('llama')) {
-        // Match any llama-3.3 variant
-        const isLlama33 = normalizedModel.includes('3.3') && normalizedTarget.includes('3.3');
-        // Match any 70B variant as fallback
-        const is70B = normalizedModel.includes('70b');
-        return isLlama33 || is70B;
-      }
-      
-      return false;
-    });
-
-    return {
-      success: true,
-      data: {
-        modelAvailable: hasMatch
-      }
-    };
   },
   async call(prompt: string, context: string): Promise<string> {
     // Always succeed in test environment
@@ -267,10 +319,6 @@ export function injectDependencies(deps: {
   if (deps.analysisCacheService) _analysisCacheService = deps.analysisCacheService;
   if (deps.decentralGPTClient) _decentralGPTClient = deps.decentralGPTClient;
 }
-
-const DECENTRALGPT_ENDPOINT = process.env.DECENTRALGPT_ENDPOINT || 'https://singapore-chat.degpt.ai/api/v0/chat/completion/proxy';
-const DECENTRALGPT_PROJECT = process.env.DECENTRALGPT_PROJECT || 'DecentralGPT';
-const DECENTRALGPT_MODEL = process.env.DECENTRALGPT_MODEL || 'llama-3.3-70b';
 
 export function mergePersonalities(original: PersonalityAnalysis, incoming: PersonalityAnalysis): PersonalityAnalysis {
   return {
@@ -575,17 +623,26 @@ export async function generateTokenName(accountData: XAccountData): Promise<Toke
       throw new Error('No tweets available for token name generation');
     }
 
-    // Use DecentralGPT to analyze tweets and generate token name
-    const prompt = `Based on these tweets and profile, suggest a creative and relevant token name that reflects the user's personality and interests. Format: JSON with name (max 30 chars), symbol (3-5 letters), and description fields.\n\nProfile:\n${JSON.stringify(accountData.profile)}\n\nTweets:\n${accountData.tweets.map(t => t.text).join('\n')}`;
+    // Use DecentralGPT to analyze tweets and generate bilingual token name
+    const prompt = `Based on these tweets and profile, suggest a creative and relevant token name that reflects the user's personality and interests. Provide both English and Chinese versions.
+
+Format your response as JSON with the following fields:
+- name_en: English name (max 30 chars)
+- name_zh: Chinese name (max 30 chars)
+- symbol: 3-5 letters, uppercase
+- description_en: English description
+- description_zh: Chinese description
+
+Profile:\n${JSON.stringify(accountData.profile)}\n\nTweets:\n${accountData.tweets.map(t => t.text).join('\n')}`;
     
     const response = await callDecentralGPT(prompt, '');
     
     try {
       const parsed = JSON.parse(response);
       return {
-        name: parsed.name.slice(0, 30), // Ensure name isn't too long
+        name: `${parsed.name_en.slice(0, 30)} / ${parsed.name_zh.slice(0, 30)}`, // Combined bilingual name
         symbol: parsed.symbol.toUpperCase().slice(0, 5), // Ensure symbol is uppercase and not too long
-        description: parsed.description,
+        description: `${parsed.description_en}\n\n${parsed.description_zh}`, // Combined bilingual description
         decimals: 18,
         totalSupply: '100000000000000000000000000000', // 100 billion
         initialPrice: '0.0001',
@@ -604,7 +661,7 @@ export async function generateTokenName(accountData: XAccountData): Promise<Toke
       };
     } catch (parseError) {
       console.error('Failed to parse token name response:', parseError);
-      throw new Error('Invalid token name generation response format');
+      throw new Error('Invalid token name generation response format / 令牌名称生成响应格式无效');
     }
   } catch (error) {
     console.error('Error generating token name:', error);
@@ -805,7 +862,7 @@ export async function analyzePersonality(xAccountData: XAccountData, isEmptyMent
       return {
         success: false,
         error: 'RATE_LIMIT_EXCEEDED' as SystemError,
-        message: 'API rate limit exceeded. Please try again later.',
+        message: 'API rate limit exceeded. Please try again later. / API 速率限制已超出，请稍后重试。',
         paymentRequired: analysisRecord.paymentRequired,
         freeUsesLeft: analysisRecord.freeUsesLeft
       };
@@ -815,7 +872,7 @@ export async function analyzePersonality(xAccountData: XAccountData, isEmptyMent
       return {
         success: false,
         error: 'TOKEN_LIMIT_EXCEEDED' as SystemError,
-        message: 'Input text exceeds maximum token limit.',
+        message: 'Input text exceeds maximum token limit. / 输入文本超过最大令牌限制。',
         paymentRequired: analysisRecord.paymentRequired,
         freeUsesLeft: analysisRecord.freeUsesLeft
       };
@@ -1105,21 +1162,9 @@ function processTweetsWithTokenLimit(tweets: Tweet[]): Tweet[] {
   return processedTweets;
 }
 
-export async function verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean }>> {
-  try {
-    // Use the injected client's verifyModelAvailability method
-    return await _decentralGPTClient.verifyModelAvailability(modelId || DECENTRALGPT_MODEL);
-  } catch (error) {
-    console.error('Error verifying model availability:', error);
-    return {
-      success: false,
-      data: {
-        modelAvailable: false
-      },
-      error: 'SYSTEM_ERROR',
-      errorMessage: 'Failed to verify model availability'
-    };
-  }
+export async function verifyModelAvailability(modelId?: string): Promise<ServiceResponse<{ modelAvailable: boolean; modelId: string; availableModels: string[] }>> {
+  // Directly delegate to the client's verifyModelAvailability method
+  return _decentralGPTClient.verifyModelAvailability(modelId);
 }
 
 export function generateUniqueId(): string {

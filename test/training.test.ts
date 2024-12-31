@@ -28,7 +28,9 @@ describe('Training Data Management', () => {
         verifyModelAvailability: async (modelId?: string) => ({
           success: true,
           data: {
-            modelAvailable: true
+            modelAvailable: true,
+            modelId: modelId || 'llama-3.3-70b',
+            availableModels: ['llama-3.3-70b', 'gpt-4', 'llama-3.3-xai']
           }
         })
       }
