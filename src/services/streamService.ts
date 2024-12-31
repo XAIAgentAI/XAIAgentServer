@@ -207,16 +207,13 @@ export class StreamService extends EventEmitter {
 
 // Export setup function that creates and initializes stream service
 export async function setupStreamService(): Promise<StreamService> {
-  // Initialize with OAuth 1.0a credentials for v2 API access
-  console.log('[StreamService] Initializing with OAuth 1.0a credentials...');
+  // Initialize with OAuth 2.0 Bearer Token for v2 API access
+  console.log('[StreamService] Initializing with OAuth 2.0 Bearer Token...');
   
   try {
     // Verify required environment variables
     const requiredEnvVars = [
-      'TWITTER_ACCESS_TOKEN',
-      'TWITTER_ACCESS_TOKEN_SECRET',
-      'TWITTER_CLIENT_ID',
-      'TWITTER_CLIENT_SECRET'
+      'TWITTER_BEARER_TOKEN'
     ];
     
     for (const envVar of requiredEnvVars) {
@@ -225,13 +222,8 @@ export async function setupStreamService(): Promise<StreamService> {
       }
     }
     
-    // Create client with OAuth 1.0a credentials
-    const client = new TwitterApi({
-      accessToken: process.env.TWITTER_ACCESS_TOKEN!,
-      accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
-      appKey: process.env.TWITTER_CLIENT_ID!, // Using OAuth 2.0 Client ID as app key
-      appSecret: process.env.TWITTER_CLIENT_SECRET! // Using OAuth 2.0 Client Secret as app secret
-    });
+    // Create client with OAuth 2.0 Bearer Token (automatically read-only)
+    const client = new TwitterApi(process.env.TWITTER_BEARER_TOKEN!);
     console.log('[StreamService] Twitter API client created');
     
     const streamService = new StreamService(client);
