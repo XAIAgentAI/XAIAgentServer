@@ -4,7 +4,8 @@ import { XMentionEvent } from '../types/events.js';
 import { XAccountData } from '../types/twitter.js';
 
 export class StreamService extends EventEmitter {
-  private client: TwitterApi;
+  private readClient: TwitterApi;  // OAuth 2.0 client for read operations
+  private writeClient: TwitterApi;  // OAuth 1.0a client for write/stream operations
   private streamClient?: TweetStream<TweetV2SingleStreamResult>;
   private autoReconnect: boolean = true;
   private autoReconnectRetries: number = 5;
@@ -21,23 +22,24 @@ export class StreamService extends EventEmitter {
     return Math.ceil(text.length / 4);
   }
 
-  constructor(client: TwitterApi) {
+  constructor(readClient: TwitterApi, writeClient: TwitterApi) {
     super();
-    this.client = client;
+    this.readClient = readClient;
+    this.writeClient = writeClient;
   }
 
   async setupStreamRules() {
     try {
       // Delete existing rules
-      const rules = await this.client.v2.streamRules();
+      const rules = await this.writeClient.v2.streamRules();
       if (rules.data?.length) {
-        await this.client.v2.updateStreamRules({
+        await this.writeClient.v2.updateStreamRules({
           delete: { ids: rules.data.map(rule => rule.id) }
         });
       }
 
       // Add new rules to track mentions and specific commands
-      await this.client.v2.updateStreamRules({
+      await this.writeClient.v2.updateStreamRules({
         add: [
           { value: '@XAIAgentAI -is:retweet', tag: 'mentions' },
           { value: '@XAIAgentAI (create token OR 创建代币) -is:retweet', tag: 'token_creation' },
@@ -59,7 +61,7 @@ export class StreamService extends EventEmitter {
       this.totalTokenCount = 0;
       await this.setupStreamRules();
 
-      this.streamClient = await this.client.v2.searchStream({
+      this.streamClient = await this.writeClient.v2.searchStream({
         'tweet.fields': ['author_id', 'created_at', 'text', 'referenced_tweets', 'in_reply_to_user_id'],
         'user.fields': ['username', 'name', 'profile_image_url'],
         expansions: ['author_id', 'referenced_tweets.id', 'in_reply_to_user_id']
@@ -68,7 +70,7 @@ export class StreamService extends EventEmitter {
       console.log('[StreamService] Stream connected successfully');
       
       // Log stream rules for verification
-      const rules = await this.client.v2.streamRules();
+      const rules = await this.writeClient.v2.streamRules();
       console.log('[StreamService] Active stream rules:', JSON.stringify(rules.data, null, 2));
       console.log('[StreamService] Stream configuration:', {
         fields: {
@@ -213,7 +215,11 @@ export async function setupStreamService(): Promise<StreamService> {
   try {
     // Verify required environment variables
     const requiredEnvVars = [
-      'TWITTER_BEARER_TOKEN'
+      'TWITTER_BEARER_TOKEN',
+      'TWITTER_ACCESS_TOKEN',
+      'TWITTER_ACCESS_TOKEN_SECRET',
+      'TWITTER_CONSUMER_KEY',
+      'TWITTER_CONSUMER_SECRET'
     ];
     
     for (const envVar of requiredEnvVars) {
@@ -222,16 +228,24 @@ export async function setupStreamService(): Promise<StreamService> {
       }
     }
     
-    // Create client with OAuth 2.0 Bearer Token (automatically read-only)
-    const client = new TwitterApi(process.env.TWITTER_BEARER_TOKEN!);
-    console.log('[StreamService] Twitter API client created');
+    // Create OAuth 1.0a client for streaming and write operations
+    const writeClient = new TwitterApi({
+      appKey: process.env.TWITTER_CONSUMER_KEY!,
+      appSecret: process.env.TWITTER_CONSUMER_SECRET!,
+      accessToken: process.env.TWITTER_ACCESS_TOKEN!,
+      accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET!
+    });
     
-    const streamService = new StreamService(client);
+    // Create read-only client with Bearer Token for v2 endpoints
+    const readClient = new TwitterApi(process.env.TWITTER_BEARER_TOKEN!);
+    console.log('[StreamService] Twitter API clients created');
+    
+    const streamService = new StreamService(readClient, writeClient);
     
     // Test API access before starting stream
     try {
       console.log('[StreamService] Testing API access...');
-      const user = await client.v2.me();
+      const user = await writeClient.v2.me();
       console.log('[StreamService] API access verified. User:', {
         id: user.data.id,
         name: user.data.name,
@@ -250,7 +264,7 @@ export async function setupStreamService(): Promise<StreamService> {
     // Test stream rules before starting
     try {
       console.log('[StreamService] Testing stream rules...');
-      const rules = await client.v2.streamRules();
+      const rules = await writeClient.v2.streamRules();
       console.log('[StreamService] Current stream rules:', rules.data || []);
     } catch (rulesError) {
       const errorDetails = {
