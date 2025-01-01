@@ -1,0 +1,81 @@
+const hre = require("hardhat");
+
+async function main() {
+  try {
+    console.log("Starting XAIAgent DRC20 token deployment...");
+
+    const [deployer] = await hre.ethers.getSigners();
+    console.log("Deploying contracts with the account:", deployer.address);
+
+    // Get current nonce
+    const nonce = await deployer.getNonce();
+    console.log("Current nonce:", nonce);
+
+    // Get current gas price and estimate deployment costs
+    const feeData = await hre.ethers.provider.getFeeData();
+    const gasPrice = BigInt(100000000); // 0.1 gwei
+    console.log("Using gas price:", hre.ethers.formatUnits(gasPrice, "gwei"), "gwei");
+
+    const XAIAgentDRC20 = await hre.ethers.getContractFactory("XAIAgentDRC20");
+    console.log("Contract factory created. Starting deployment...");
+
+    // Estimate gas needed for deployment
+    const deploymentData = XAIAgentDRC20.interface.encodeDeploy([deployer.address]);
+    const estimatedGas = await deployer.estimateGas({
+      data: XAIAgentDRC20.bytecode + deploymentData.slice(2)
+    });
+    
+    console.log("Estimated gas needed:", estimatedGas.toString());
+    console.log("Contract bytecode size:", Math.ceil(XAIAgentDRC20.bytecode.length / 2 - 1), "bytes");
+    
+    const balance = await deployer.provider.getBalance(deployer.address);
+    console.log("Account balance:", hre.ethers.formatEther(balance), "DBC");
+    
+    const totalCost = gasPrice * estimatedGas;
+    console.log("Estimated total cost:", hre.ethers.formatEther(totalCost), "DBC");
+    
+    const deploymentOptions = {
+      gasLimit: estimatedGas,
+      gasPrice: gasPrice,
+      nonce: nonce
+    };
+
+    console.log("Deploying with options:", deploymentOptions);
+    const token = await XAIAgentDRC20.deploy(deployer.address, deploymentOptions);
+    
+    console.log("Deployment transaction sent. Hash:", token.deploymentTransaction().hash);
+    console.log("Waiting for confirmation...");
+
+    await token.waitForDeployment();
+    const address = await token.getAddress();
+
+    console.log("\nDeployment successful!");
+    console.log("Contract address:", address);
+    console.log("Owner address:", deployer.address);
+
+    // Verify total supply
+    const totalSupply = await token.totalSupply();
+    console.log("Total supply:", hre.ethers.formatUnits(totalSupply, 18), "XAA");
+
+    return { success: true, address };
+  } catch (error) {
+    console.error("\nDeployment failed:");
+    console.error("Error:", error.message);
+    if (error.transaction) {
+      console.error("Failed transaction:", error.transaction);
+    }
+    throw error;
+  }
+}
+
+main()
+  .then((result) => {
+    if (result && result.success) {
+      process.exit(0);
+    } else {
+      process.exit(1);
+    }
+  })
+  .catch((error) => {
+    process.exit(1);
+  });
