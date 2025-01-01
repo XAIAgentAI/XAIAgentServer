@@ -1,10 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import session from 'express-session';
 import rateLimit from 'express-rate-limit';
+import { log } from './utils/logger.js';
 import { router as aiAgentRouter } from './routes/aiAgent.js';
 import { router as tokenRouter } from './routes/token.js';
 import { router as trainingRouter } from './routes/training.js';
+import { router as registrationRouter } from './routes/registration.js';
+import { router as monitoringRouter } from './routes/monitoring.js';
+import { router as authRouter } from './routes/auth.js';
 
 dotenv.config();
 
@@ -22,12 +27,30 @@ app.use(cors());
 app.use(express.json());
 app.use(limiter);
 
+// Session middleware
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
 // Logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+    log.info('Request completed', {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
   });
   next();
 });
@@ -36,6 +59,9 @@ app.use((req, res, next) => {
 app.use('/ai-agent', aiAgentRouter);
 app.use('/token', tokenRouter);
 app.use('/training', trainingRouter);
+app.use('/api/v1/registration', registrationRouter);
+app.use('/api/v1/monitoring', monitoringRouter);
+app.use('/auth', authRouter);
 
 // Enhanced health check and monitoring
 app.get('/health', async (req: express.Request, res: express.Response) => {
@@ -78,7 +104,7 @@ import { startTweetScheduler } from './scheduler/tweetScheduler.js';
 import { setupStreamService } from './services/streamService.js';
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} at ${new Date().toISOString()}`);
+  log.info('Server started', { port: PORT, timestamp: new Date().toISOString() });
   
   // Initialize stream service
   setupStreamService()
@@ -86,5 +112,5 @@ app.listen(PORT, () => {
   
   // Start the tweet scheduler
   startTweetScheduler();
-  console.log('Tweet scheduler started');
+  log.info('Tweet scheduler started');
 });
